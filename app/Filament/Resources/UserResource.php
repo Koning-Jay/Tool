@@ -18,6 +18,16 @@ class UserResource extends Resource
     protected static ?string $model = User::class;
 
     protected static ?string $navigationIcon = 'heroicon-s-users';
+    protected static ?string $navigationGroup = 'User Management';
+    protected static ?string $navigationLabel = 'Users';
+    protected static ?string $label = 'User';
+    protected static ?string $pluralLabel = 'Users';
+    protected static ?string $slug = 'users';
+    protected static ?string $title = 'Users';
+    protected static ?string $recordTitleAttribute = 'name';
+    protected static ?string $modelLabel = 'User';
+    protected static ?string $pluralModelLabel = 'Users';
+    protected static ?string $searchLabel = 'Search Users';
 
     public static function form(Form $form): Form
     {
@@ -49,7 +59,7 @@ class UserResource extends Resource
                     ->dateTime(),
             ])
             ->filters([
-                //
+                
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),

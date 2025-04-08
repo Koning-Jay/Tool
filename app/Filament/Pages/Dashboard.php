@@ -13,11 +13,12 @@ use Filament\Widgets\StatsOverviewWidget;
 
 class Dashboard extends Page
 {
-    protected static ?string $navigationIcon = 'heroicon-o-home';
+    protected static ?string $navigationIcon = 'heroicon-s-home';
     protected static ?string $navigationLabel = 'Dashboard';
-    protected static ?string $title = 'Dashboard';
+    protected static ?string $title = 'Welkom op de Monitoring Dashboard Pagina';
     protected static string $view = 'filament.pages.dashboard';
     protected static ?int $navigationSort = 1;
+    
 
     public function getStats(): array
     {

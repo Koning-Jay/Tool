@@ -15,7 +15,7 @@ class CustomchecksResource extends Resource
 {
     protected static ?string $model = Customchecks::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-shield-check';
+    protected static ?string $navigationIcon = 'heroicon-s-shield-check';
     protected static ?string $navigationLabel = 'Custom Checks';
     protected static ?string $navigationGroup = 'Monitoring';
     protected static ?int $navigationSort = 3;

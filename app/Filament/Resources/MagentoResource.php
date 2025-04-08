@@ -24,6 +24,10 @@ class MagentoResource extends Resource
 {
     protected static ?string $model = Magento::class;
     protected static ?string $navigationIcon = 'heroicon-s-computer-desktop';
+    protected static ?string $navigationGroup = 'Monitoring';
+    protected static ?string $label = 'Magento Site';
+
+
     protected static ?string $navigationLabel = 'Pages';
 
     public static function getNavigationBadge(): ?string
