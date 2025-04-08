@@ -62,6 +62,5 @@ class Dashboard extends Page
     }
 }
 
-echo "Dashboard page loaded successfully.";
 
 
