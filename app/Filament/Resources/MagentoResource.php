@@ -17,7 +17,7 @@ use Filament\Forms\Components\Hidden;
 use Illuminate\Validation\Rule;
 use Filament\Notifications\Notification;
 use App\Notifications\WebsiteDownNotification;
-use Filament\Infolists\Components\Card;
+use Filament\Forms\Components\Card;
 use Illuminate\Support\Facades\Notification as FacadesNotification;
 
 class MagentoResource extends Resource
