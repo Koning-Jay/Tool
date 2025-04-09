@@ -53,20 +53,16 @@ class MagentoResource extends Resource
                             ->required()
                             ->url()
                             ->maxLength(255),
-                        
                         Forms\Components\TextInput::make('secondary_url')
                             ->label('Secondary URL (Optional)')
                             ->url()
                             ->maxLength(255),
-                        
                         Forms\Components\TextInput::make('tertiary_url')
                             ->label('Tertiary URL (Optional)')
                             ->url()
                             ->maxLength(255),
-                        
                         Forms\Components\TextInput::make('api_key')
                             ->maxLength(255),
-
                         Forms\Components\TagsInput::make('notification_emails')
                             ->label('Notification Emails')
                             ->placeholder('Add email addresses for downtime alerts')
@@ -90,7 +86,9 @@ class MagentoResource extends Resource
                 Tables\Columns\TextColumn::make('name')
                     ->label('Naam')
                     ->searchable(),
-                
+                    Tables\Columns\TextColumn::make('Check Type')
+                    ->label('Check Type'),
+
                 TextColumn::make('primary_status')
                     ->label('Primary URL')
                     ->state(function (Magento $record) {
