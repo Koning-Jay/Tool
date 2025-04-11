@@ -48,7 +48,6 @@ class CustomchecksResource extends Resource
                         ])
                         ->required(),
 
-                    // Group "Threshold Value" and "Active" toggle in the same row
                     Forms\Components\Grid::make(2)
                         ->schema([
                             Forms\Components\TextInput::make('threshold_value')
