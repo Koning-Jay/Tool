@@ -230,7 +230,6 @@ class ViewMagento extends ViewRecord
                                             return 'No custom checks assigned';
                                         }
                                         
-                                        // Instead of returning an array, return a formatted string
                                         $formattedChecks = $checks->unique('id')->map(function ($check) {
                                             $severity = match($check->alert_severity) {
                                                 'low' => 'Medium Severity -',
@@ -255,7 +254,6 @@ class ViewMagento extends ViewRecord
                             ->dateTime(),
                     ]),
                 
-                // Fixed Tabs component with improved debugging
                 Tabs::make('Recent Checks')
                     ->tabs([
                         Tab::make('All URLs')
@@ -264,7 +262,6 @@ class ViewMagento extends ViewRecord
                                     ->label('All Recent Checks')
                                     ->html()
                                     ->state(function ($record) {
-                                        // Fetch more checks for debugging
                                         $checks = $record->checks()->latest('checked_at')->take(10)->get();
                                         
                                         if ($checks->isEmpty()) {
