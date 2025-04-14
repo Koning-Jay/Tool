@@ -232,11 +232,8 @@ class ViewMagento extends ViewRecord
                                         
                                         $formattedChecks = $checks->unique('id')->map(function ($check) {
                                             $severity = match($check->alert_severity) {
-                                                'low' => 'Medium Severity -',
-                                                'medium' => 'Medium Severity -',
-                                                'high' => 'High Severity -',
-                                                'critical' => 'Critical Severity -',
-                                                default => 'Unknown Severity -'
+                                       
+                                                default => ''
                                             };
                                             return "{$severity} " . $check->name;
                                         })->join('<br>'); 

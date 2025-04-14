@@ -168,7 +168,6 @@ class CustomchecksResource extends Resource
     public static function getRelations(): array
     {
         return [
-            //
         ];
     }
 
