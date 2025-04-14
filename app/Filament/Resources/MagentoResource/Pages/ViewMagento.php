@@ -36,7 +36,6 @@ class ViewMagento extends ViewRecord
                 ->action(function () {
                     $record = $this->getRecord();
                     
-                    // Check primary URL
                     $primaryResult = MagentoResource::checkWebsiteStatus($record->url, 'primary');
                     Check::create([
                         'magento_id' => $record->id,
@@ -45,7 +44,6 @@ class ViewMagento extends ViewRecord
                         'checked_at' => now(),
                     ]);
                     
-                    // Check secondary URL if present
                     if (!empty($record->secondary_url)) {
                         $secondaryResult = MagentoResource::checkWebsiteStatus($record->secondary_url, 'secondary');
                         Check::create([
@@ -56,7 +54,6 @@ class ViewMagento extends ViewRecord
                         ]);
                     }
                     
-                    // Check tertiary URL if present
                     if (!empty($record->tertiary_url)) {
                         $tertiaryResult = MagentoResource::checkWebsiteStatus($record->tertiary_url, 'tertiary');
                         Check::create([
@@ -73,7 +70,6 @@ class ViewMagento extends ViewRecord
                         ->success()
                         ->send();
                         
-                    // Force a reload of the page to refresh the data
                     $this->redirect($this->getResource()::getUrl('view', ['record' => $record]));
                 })
                 ->color('primary'),

@@ -16,7 +16,6 @@ class ListMagentos extends ListRecords
         return [
             Actions\CreateAction::make(),
             
-            // Add the "Check all websites" button to the header
             Actions\Action::make('check_all_websites')
                 ->label('Alle websites checken')
                 ->icon('heroicon-o-globe-alt')
