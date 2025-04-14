@@ -219,11 +219,10 @@ class ViewMagento extends ViewRecord
                             ->label('API Key')
                             ->visible(fn ($record) => filled($record->api_key)),
                         
-                        Section::make('Assigned Custom Checks')
+                            Section::make('Assigned Custom Checks')
                             ->schema([
                                 TextEntry::make('customchecks')
                                     ->label('')
-                                    ->listWithLineBreaks()
                                     ->formatStateUsing(function ($record) {
                                         $checks = $record->customchecks;
                                         
@@ -231,17 +230,19 @@ class ViewMagento extends ViewRecord
                                             return 'No custom checks assigned';
                                         }
                                         
-                                        return $checks->map(function ($check) {
+                                        // Instead of returning an array, return a formatted string
+                                        $formattedChecks = $checks->unique('id')->map(function ($check) {
                                             $severity = match($check->alert_severity) {
-                                                'low' => 'Low Severity -',
+                                                'low' => 'Medium Severity -',
                                                 'medium' => 'Medium Severity -',
                                                 'high' => 'High Severity -',
                                                 'critical' => 'Critical Severity -',
                                                 default => 'Unknown Severity -'
-                                          
                                             };
                                             return "{$severity} " . $check->name;
-                                        });
+                                        })->join('<br>'); 
+                                        
+                                        return new \Illuminate\Support\HtmlString($formattedChecks);
                                     }),
                             ]),
                         
