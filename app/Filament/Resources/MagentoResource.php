@@ -86,33 +86,68 @@ class MagentoResource extends Resource
                 Tables\Columns\TextColumn::make('name')
                     ->label('Naam')
                     ->searchable(),
-                    Tables\Columns\TextColumn::make('Check Type')
-                    ->label('Check Type'),
-
-                TextColumn::make('primary_status')
-                    ->label('Primary URL')
+                    Tables\Columns\TextColumn::make('customchecks.name')
+                    ->label('Assigned Custom Checks')
+                    ->formatStateUsing(function ($record) {
+                        $checks = $record->customchecks;
+                
+                        if ($checks->isEmpty()) {
+                            return 'No custom checks assigned';
+                        }
+                
+                        return $checks->pluck('name')->unique()->join(', ');
+                    }),
+    
+                TextColumn::make('status')
+                    ->label('Status')
                     ->state(function (Magento $record) {
-                        $latestCheck = $record->checks()
+                        $statuses = [];
+                        
+                        // Check primary URL status
+                        $primaryCheck = $record->checks()
                             ->where('url_type', 'primary')
                             ->latest('checked_at')
                             ->first();
+                        $primaryStatus = $primaryCheck ? $primaryCheck->status : self::checkWebsiteStatus($record->url)['status'];
+                        $statuses[] = $primaryStatus;
                         
-                        return $latestCheck ? $latestCheck->status : self::checkWebsiteStatus($record->url)['status'];
+                        // Check secondary URL status if it exists
+                        if (!empty($record->secondary_url)) {
+                            $secondaryCheck = $record->checks()
+                                ->where('url_type', 'secondary')
+                                ->latest('checked_at')
+                                ->first();
+                            $secondaryStatus = $secondaryCheck ? $secondaryCheck->status : self::checkWebsiteStatus($record->secondary_url, 'secondary')['status'];
+                            $statuses[] = $secondaryStatus;
+                        }
+                        
+                        // Check tertiary URL status if it exists
+                        if (!empty($record->tertiary_url)) {
+                            $tertiaryCheck = $record->checks()
+                                ->where('url_type', 'tertiary')
+                                ->latest('checked_at')
+                                ->first();
+                            $tertiaryStatus = $tertiaryCheck ? $tertiaryCheck->status : self::checkWebsiteStatus($record->tertiary_url, 'tertiary')['status'];
+                            $statuses[] = $tertiaryStatus;
+                        }
+                        
+                        // If any URL is down, show "Down"
+                        return in_array('Down', $statuses) ? 'Down' : 'Live';
                     })
                     ->badge()
                     ->color(fn (string $state): string => $state === 'Live' ? 'success' : 'danger'),
-
+    
                 TextColumn::make('last_checked')
                     ->label('Laatste controle')
                     ->state(function (Magento $record) {
                         $latestCheck = $record->checks()->latest('checked_at')->first();
                         return $latestCheck ? $latestCheck->checked_at->diffForHumans() : 'Nooit';
                     }),
-
+    
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Aangemaakt op')
                     ->dateTime(),
-
+    
                 Tables\Columns\TextColumn::make('updated_at')
                     ->dateTime()
                     ->label('Laatste update')
@@ -122,33 +157,35 @@ class MagentoResource extends Resource
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
-
+    
                 Tables\Actions\Action::make('check_now')
                     ->label('Nu controleren')
                     ->icon('heroicon-o-arrow-path')
                     ->action(function (Magento $record) {
+                        // Check primary URL
                         try {
                             $response = Http::timeout(5)->get($record->url);
                             $primaryStatus = $response->successful() ? 'Live' : 'Down';
                         } catch (\Exception $e) {
                             $primaryStatus = 'Down';
                         }
-
+    
                         Check::create([
                             'magento_id' => $record->id,
                             'url_type' => 'primary',
                             'status' => $primaryStatus,
                             'checked_at' => now(),
                         ]);
-
+    
                         if ($primaryStatus === 'Down' && !empty($record->notification_emails)) {
                             foreach ($record->notification_emails as $email) {
                                 FacadesNotification::route('mail', trim($email))
                                     ->notify(new WebsiteDownNotification($record, 'primary'));
                             }
                         }
-
+    
                         // Check secondary URL if present
+                        $secondaryStatus = null;
                         if (!empty($record->secondary_url)) {
                             try {
                                 $response = Http::timeout(5)->get($record->secondary_url);
@@ -156,14 +193,14 @@ class MagentoResource extends Resource
                             } catch (\Exception $e) {
                                 $secondaryStatus = 'Down';
                             }
-
+    
                             Check::create([
                                 'magento_id' => $record->id,
                                 'url_type' => 'secondary',
                                 'status' => $secondaryStatus,
                                 'checked_at' => now(),
                             ]);
-
+    
                             if ($secondaryStatus === 'Down' && !empty($record->notification_emails)) {
                                 foreach ($record->notification_emails as $email) {
                                     FacadesNotification::route('mail', trim($email))
@@ -171,8 +208,9 @@ class MagentoResource extends Resource
                                 }
                             }
                         }
-
+    
                         // Check tertiary URL if present
+                        $tertiaryStatus = null;
                         if (!empty($record->tertiary_url)) {
                             try {
                                 $response = Http::timeout(5)->get($record->tertiary_url);
@@ -180,14 +218,14 @@ class MagentoResource extends Resource
                             } catch (\Exception $e) {
                                 $tertiaryStatus = 'Down';
                             }
-
+    
                             Check::create([
                                 'magento_id' => $record->id,
                                 'url_type' => 'tertiary',
                                 'status' => $tertiaryStatus,
                                 'checked_at' => now(),
                             ]);
-
+    
                             if ($tertiaryStatus === 'Down' && !empty($record->notification_emails)) {
                                 foreach ($record->notification_emails as $email) {
                                     FacadesNotification::route('mail', trim($email))
@@ -195,28 +233,30 @@ class MagentoResource extends Resource
                                 }
                             }
                         }
-
+    
+                        // Generate overall status message
+                        $overallStatus = ($primaryStatus === 'Down' || 
+                                        ($secondaryStatus === 'Down' && !empty($record->secondary_url)) || 
+                                        ($tertiaryStatus === 'Down' && !empty($record->tertiary_url))) 
+                                        ? 'Down' : 'Live';
+    
                         Notification::make()
                             ->title('Website Checked')
-                            ->body("All URLs for {$record->name} have been checked.")
+                            ->body("{$record->name} status: {$overallStatus}")
                             ->success()
                             ->send();
                     })
                     ->color('success'),
             ])
             ->bulkActions([
-                Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
-                ]),
+                Tables\Actions\DeleteBulkAction::make(),
             ])
             ->recordUrl(fn (Magento $record): string => 
                 static::getUrl('view', ['record' => $record])
             );
     }
 
-    /**
-     * Check if a website is live or down.
-     */
+ 
     public static function checkWebsiteStatus(string $url, string $urlType = 'primary'): array
     {
         try {

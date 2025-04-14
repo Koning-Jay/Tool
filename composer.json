@@ -14,6 +14,7 @@
         "laravel/ui": "^4.6",
         "livewire/livewire": "^3.6",
         "mvenghaus/filament-plugin-schedule-monitor": "3.0",
+        "promphp/prometheus_client_php": "^2.14",
         "spatie/laravel-schedule-monitor": "^3.10"
     },
     "require-dev": {
