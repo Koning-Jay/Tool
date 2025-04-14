@@ -29,6 +29,11 @@ class UserResource extends Resource
     protected static ?string $pluralModelLabel = 'Users';
     protected static ?string $searchLabel = 'Search Users';
 
+    public static function getNavigationBadge(): ?string
+    {
+        return static::getModel()::count();
+    }
+
     public static function form(Form $form): Form
     {
         return $form
