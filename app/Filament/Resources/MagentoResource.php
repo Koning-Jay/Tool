@@ -20,7 +20,7 @@ use App\Notifications\WebsiteDownNotification;
 use Filament\Forms\Components\Card;
 use Illuminate\Support\Facades\Notification as FacadesNotification;
 
-class MagentoResource extends Resource
+class MagentoResource extends Resource //dwad
 {
     protected static ?string $model = Magento::class;
     protected static ?string $navigationIcon = 'heroicon-s-computer-desktop';
