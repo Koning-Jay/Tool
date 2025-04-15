@@ -131,7 +131,6 @@ class MagentoResource extends Resource
                             $statuses[] = $tertiaryStatus;
                         }
                         
-                        // If any URL is down, show "Down"
                         return in_array('Down', $statuses) ? 'Down' : 'Live';
                     })
                     ->badge()
