@@ -353,14 +353,12 @@ class ViewMagento extends ViewRecord
                                             return '<em>Geen Tertiary URL ingesteld</em>';
                                         }
                                         
-                                        // Get all tertiary checks to debug the issue
                                         $checks = Check::where('magento_id', $record->id)
                                             ->where('url_type', 'tertiary')
                                             ->latest('checked_at')
                                             ->take(10)
                                             ->get();
                                         
-                                        // Output check count for debugging
                                         $checkCount = $checks->count();
                                         
                                         if ($checkCount === 0) {

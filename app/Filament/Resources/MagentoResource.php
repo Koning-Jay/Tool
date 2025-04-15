@@ -103,7 +103,6 @@ class MagentoResource extends Resource
                     ->state(function (Magento $record) {
                         $statuses = [];
                         
-                        // Check primary URL status
                         $primaryCheck = $record->checks()
                             ->where('url_type', 'primary')
                             ->latest('checked_at')
@@ -111,7 +110,6 @@ class MagentoResource extends Resource
                         $primaryStatus = $primaryCheck ? $primaryCheck->status : self::checkWebsiteStatus($record->url)['status'];
                         $statuses[] = $primaryStatus;
                         
-                        // Check secondary URL status if it exists
                         if (!empty($record->secondary_url)) {
                             $secondaryCheck = $record->checks()
                                 ->where('url_type', 'secondary')
@@ -121,7 +119,6 @@ class MagentoResource extends Resource
                             $statuses[] = $secondaryStatus;
                         }
                         
-                        // Check tertiary URL status if it exists
                         if (!empty($record->tertiary_url)) {
                             $tertiaryCheck = $record->checks()
                                 ->where('url_type', 'tertiary')
@@ -161,7 +158,6 @@ class MagentoResource extends Resource
                     ->label('Check Now')
                     ->icon('heroicon-o-arrow-path')
                     ->action(function (Magento $record) {
-                        // Check primary URL
                         try {
                             $response = Http::timeout(5)->get($record->url);
                             $primaryStatus = $response->successful() ? 'Live' : 'Down';
@@ -183,7 +179,6 @@ class MagentoResource extends Resource
                             }
                         }
     
-                        // Check secondary URL if present
                         $secondaryStatus = null;
                         if (!empty($record->secondary_url)) {
                             try {
@@ -208,7 +203,6 @@ class MagentoResource extends Resource
                             }
                         }
     
-                        // Check tertiary URL if present
                         $tertiaryStatus = null;
                         if (!empty($record->tertiary_url)) {
                             try {
@@ -233,7 +227,6 @@ class MagentoResource extends Resource
                             }
                         }
     
-                        // Generate overall status message
                         $overallStatus = ($primaryStatus === 'Down' || 
                                         ($secondaryStatus === 'Down' && !empty($record->secondary_url)) || 
                                         ($tertiaryStatus === 'Down' && !empty($record->tertiary_url))) 
