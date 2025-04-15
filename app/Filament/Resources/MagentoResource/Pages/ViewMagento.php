@@ -22,16 +22,16 @@ class ViewMagento extends ViewRecord
     {
         return [
             Actions\EditAction::make()
-                ->label('Bewerken')
+                ->label('Edit')
                 ->icon('heroicon-o-pencil')
                 ->color('primary'),
             Actions\DeleteAction::make()
-                ->label('Verwijderen')
+                ->label('Delete')
                 ->icon('heroicon-o-trash')
                 ->color('danger'),
 
             Actions\Action::make('check_now')
-                ->label('Nu controleren')
+                ->label('Check Now')
                 ->icon('heroicon-o-arrow-path')
                 ->action(function () {
                     $record = $this->getRecord();
@@ -83,7 +83,7 @@ class ViewMagento extends ViewRecord
                 Section::make('Website Info')
                     ->schema([
                         TextEntry::make('name')
-                            ->label('Naam'),
+                            ->label('Name'),
                         
                         Section::make('Primary URL')
                             ->schema([
@@ -108,7 +108,7 @@ class ViewMagento extends ViewRecord
                                     ->color(fn (string $state): string => $state === 'Live' ? 'success' : 'danger'),
                                 
                                 TextEntry::make('primary_last_checked')
-                                    ->label('Laatste controle')
+                                    ->label('Last Check')
                                     ->state(function ($record) {
                                         $latestCheck = $record->checks()
                                             ->where('url_type', 'primary')
@@ -150,7 +150,7 @@ class ViewMagento extends ViewRecord
                                     }),
                                 
                                 TextEntry::make('secondary_last_checked')
-                                    ->label('Laatste controle')
+                                    ->label('Last Check')
                                     ->state(function ($record) {
                                         if (empty($record->secondary_url)) {
                                             return 'N/A';
@@ -196,7 +196,7 @@ class ViewMagento extends ViewRecord
                                     }),
                                 
                                 TextEntry::make('tertiary_last_checked')
-                                    ->label('Laatste controle')
+                                    ->label('Last Check')
                                     ->state(function ($record) {
                                         if (empty($record->tertiary_url)) {
                                             return 'N/A';
@@ -239,11 +239,11 @@ class ViewMagento extends ViewRecord
                             ]),
                         
                         TextEntry::make('created_at')
-                            ->label('Aangemaakt op')
+                            ->label('Made on')
                             ->dateTime(),
                         
                         TextEntry::make('updated_at')
-                            ->label('Laatste update')
+                            ->label('Last updated')
                             ->dateTime(),
                     ]),
                 

@@ -84,7 +84,7 @@ class MagentoResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('name')
-                    ->label('Naam')
+                    ->label('Name')
                     ->searchable(),
                     Tables\Columns\TextColumn::make('customchecks.name')
                     ->label('Assigned Custom Checks')
@@ -137,14 +137,14 @@ class MagentoResource extends Resource
                     ->color(fn (string $state): string => $state === 'Live' ? 'success' : 'danger'),
     
                 TextColumn::make('last_checked')
-                    ->label('Laatste controle')
+                    ->label('Last checked')
                     ->state(function (Magento $record) {
                         $latestCheck = $record->checks()->latest('checked_at')->first();
                         return $latestCheck ? $latestCheck->checked_at->diffForHumans() : 'Nooit';
                     }),
     
                 Tables\Columns\TextColumn::make('created_at')
-                    ->label('Aangemaakt op')
+                    ->label('Made on')
                     ->dateTime(),
     
                 Tables\Columns\TextColumn::make('updated_at')
@@ -158,7 +158,7 @@ class MagentoResource extends Resource
                 Tables\Actions\EditAction::make(),
     
                 Tables\Actions\Action::make('check_now')
-                    ->label('Nu controleren')
+                    ->label('Check Now')
                     ->icon('heroicon-o-arrow-path')
                     ->action(function (Magento $record) {
                         // Check primary URL
