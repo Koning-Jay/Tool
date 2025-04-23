@@ -21,71 +21,96 @@ class CustomchecksResource extends Resource
     protected static ?int $navigationSort = 3;
 
     public static function form(Form $form): Form
-{
-    return $form
-        ->schema([
-            Forms\Components\Card::make()
-                ->schema([
-                    Forms\Components\TextInput::make('name')
-                        ->required()
-                        ->maxLength(255)
-                        ->columnSpan(2),
-                    
-                    Forms\Components\Select::make('check_type')
-                        ->options([
-                            'cpu' => 'CPU Usage',
-                            'ram' => 'Memory Usage',
-                            'sales' => 'Sales Performance',
-                        ])
-                        ->required()
-                        ->reactive(),
-                    
-                    Forms\Components\Select::make('comparison_operator')
-                        ->options([
-                            'Greater than' => 'Greater than',
-                            'Less than' => 'Less than',
-                            'Equal to' => 'Equal to'
-                        ])
-                        ->required(),
-
-                    Forms\Components\Grid::make(2)
-                        ->schema([
-                            Forms\Components\TextInput::make('threshold_value')
-                                ->numeric()
-                                ->required()
-                                ->suffix(function (Forms\Get $get) {
-                                    $type = $get('check_type');
-                                    return match ($type) {
-                                        'cpu', 'ram' => '%',
-                                        'sales' => 'Sales',
-                                        default => '',
-                                    };
-                                })
-                                ->rule(function (Forms\Get $get) {
-                                    $type = $get('check_type');
-                                    return match ($type) {
-                                        'cpu', 'ram' => 'max:100',
-                                        default => null,
-                                    };
-                                }),
-
-                            Forms\Components\Toggle::make('is_active')
-                                ->label('Active')
-                                ->default(true),
-                        ]),
-
-                    Forms\Components\Select::make('magentos')
-                        ->multiple()
-                        ->relationship('magentos', 'name')
-                        ->preload()
-                        ->label('Assign to Magento Pages')
-                        ->helperText('Select the Magento pages where this check should be applied')
-                        ->columnSpan(2),
-                ])
-                ->columns(2),
-        ]);
-}
-
+    {
+        return $form
+            ->schema([
+                Forms\Components\Section::make('Custom Check Configuration')
+                    ->description('Configure monitoring parameters for this check')
+                    ->schema([
+                        Forms\Components\TextInput::make('name')
+                            ->required()
+                            ->maxLength(255)
+                            ->label('Check Name')
+                            ->placeholder('Enter a descriptive name')
+                            ->columnSpanFull(),
+                        
+                        Forms\Components\Grid::make(2)
+                            ->schema([
+                                Forms\Components\Select::make('check_type')
+                                    ->options([
+                                        'cpu' => 'CPU Usage',
+                                        'ram' => 'Memory Usage',
+                                        'sales' => 'Sales Performance',
+                                    ])
+                                    ->required()
+                                    ->reactive()
+                                    ->label('Check Type')
+                                    ->helperText('Select the metric to monitor'),
+                                
+                                Forms\Components\Select::make('comparison_operator')
+                                    ->options([
+                                        'Greater than' => 'Greater than',
+                                        'Less than' => 'Less than',
+                                        'Equal to' => 'Equal to'
+                                    ])
+                                    ->required()
+                                    ->label('Comparison')
+                                    ->helperText('How should the value be compared'),
+                            ]),
+    
+                        Forms\Components\Grid::make(2)
+                            ->schema([
+                                Forms\Components\TextInput::make('threshold_value')
+                                    ->numeric()
+                                    ->required()
+                                    ->label('Threshold Value')
+                                    ->helperText('The value that triggers this check')
+                                    ->suffix(function (Forms\Get $get) {
+                                        $type = $get('check_type');
+                                        return match ($type) {
+                                            'cpu', 'ram' => '%',
+                                            'sales' => 'Sales',
+                                            default => '',
+                                        };
+                                    })
+                                    ->rule(function (Forms\Get $get) {
+                                        $type = $get('check_type');
+                                        return match ($type) {
+                                            'cpu', 'ram' => 'max:100',
+                                            default => null,
+                                        };
+                                    }),
+    
+                                Forms\Components\Toggle::make('is_active')
+                                    ->label('Active Status')
+                                    ->helperText('Enable or disable this check')
+                                    ->default(true),
+                            ]),
+    
+                        Forms\Components\Section::make('Assigned Pages')
+                            ->schema([
+                                Forms\Components\Select::make('magentos')
+                                    ->multiple()
+                                    ->relationship('magentos', 'name')
+                                    ->preload()
+                                    ->label('Assign to Magento Pages')
+                                    ->helperText('Select the Magento pages where this check should be applied')
+                                    ->columnSpanFull()
+                                    ->searchable()
+                                    ->default(function () {
+                                        // Check if we're coming from a ViewMagento page with preselection
+                                        $preselectedMagentoId = request()->get('preselect_magento');
+                                        
+                                        if ($preselectedMagentoId) {
+                                            return [$preselectedMagentoId];
+                                        }
+                                        
+                                        return [];
+                                    }),
+                            ]),
+                    ]),
+            ]);
+    }
     public static function table(Table $table): Table
     {
         return $table

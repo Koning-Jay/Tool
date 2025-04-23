@@ -140,14 +140,7 @@ class MagentoResource extends Resource
                         return $latestCheck ? $latestCheck->checked_at->diffForHumans() : 'Nooit';
                     }),
     
-                Tables\Columns\TextColumn::make('created_at')
-                    ->label('Made on')
-                    ->dateTime(),
-    
-                Tables\Columns\TextColumn::make('updated_at')
-                    ->dateTime()
-                    ->label('Laatste update')
-                    ->tooltip(fn ($record) => 'Laatste wijziging op: ' . $record->updated_at->timezone('Europe/Amsterdam')->format('d-m-Y H:i:s'))
+
             ])
             ->filters([])
             ->actions([
