@@ -13,10 +13,16 @@ use Filament\Notifications\Notification;
 use Filament\Infolists\Components\Grid;
 use Filament\Infolists\Components\Tabs;
 use Filament\Infolists\Components\Tabs\Tab;
+use Filament\Forms\Components\Select;
+use Filament\Infolists\Components\Actions as InfolistActions;
+use Filament\Infolists\Components\Actions\Action as InfolistAction;
 
 class ViewMagento extends ViewRecord
 {
     protected static string $resource = MagentoResource::class;
+    
+    // Add a property to store the selected number of checks to display
+    public int $checksLimit = 10;
 
     protected function getHeaderActions(): array
     {
@@ -228,7 +234,6 @@ class ViewMagento extends ViewRecord
                                         
                                         $formattedChecks = $checks->unique('id')->map(function ($check) {
                                             $severity = match($check->alert_severity) {
-                                       
                                                 default => ''
                                             };
                                             return "{$severity} " . $check->name;
@@ -247,137 +252,172 @@ class ViewMagento extends ViewRecord
                             ->dateTime(),
                     ]),
                 
-                Tabs::make('Recent Checks')
-                    ->tabs([
-                        Tab::make('All URLs')
-                            ->schema([
-                                TextEntry::make('all_recent_checks')
-                                    ->label('All Recent Checks')
-                                    ->html()
-                                    ->state(function ($record) {
-                                        $checks = $record->checks()->latest('checked_at')->take(10)->get();
-                                        
-                                        if ($checks->isEmpty()) {
-                                            return '<em>Geen recente controles</em>';
-                                        }
-                                        
-                                        $html = '<div class="space-y-2">';
-                                        foreach ($checks as $check) {
-                                            $statusColor = $check->status === 'Live' ? 'text-green-600' : 'text-red-600';
-                                            $urlType = ucfirst($check->url_type);
-                                            $html .= '<div class="flex justify-between">';
-                                            $html .= '<span>' . $check->checked_at->format('d-m-Y H:i:s') . '</span>';
-                                            $html .= '<span class="mx-4 text-gray-600">' . $urlType . ' URL</span>';
-                                            $html .= '<span class="' . $statusColor . ' font-medium">' . $check->status . '</span>';
-                                            $html .= '</div>';
-                                        }
-                                        $html .= '</div>';
-                                        
-                                        return $html;
-                                    })
-                            ]),
-                        
-                        Tab::make('URL .1')
-                            ->schema([
-                                TextEntry::make('primary_recent_checks')
-                                    ->label('Primary URL Checks')
-                                    ->html()
-                                    ->state(function ($record) {
-                                        $checks = $record->checks()
-                                            ->where('url_type', 'primary')
-                                            ->latest('checked_at')
-                                            ->take(10)
-                                            ->get();
-                                        
-                                        if ($checks->isEmpty()) {
-                                            return '<em>Geen recente controles voor Primary URL</em>';
-                                        }
-                                        
-                                        $html = '<div class="space-y-2">';
-                                        foreach ($checks as $check) {
-                                            $statusColor = $check->status === 'Live' ? 'text-green-600' : 'text-red-600';
-                                            $html .= '<div class="flex justify-between">';
-                                            $html .= '<span>' . $check->checked_at->format('d-m-Y H:i:s') . '</span>';
-                                            $html .= '<span class="' . $statusColor . ' font-medium">' . $check->status . '</span>';
-                                            $html .= '</div>';
-                                        }
-                                        $html .= '</div>';
-                                        
-                                        return $html;
-                                    })
-                            ]),
-                        
-                        Tab::make('URL .2')
-                            ->schema([
-                                TextEntry::make('secondary_recent_checks')
-                                    ->label('Secondary URL Checks')
-                                    ->html()
-                                    ->state(function ($record) {
-                                        if (empty($record->secondary_url)) {
-                                            return '<em>Geen Secondary URL ingesteld</em>';
-                                        }
-                                        
-                                        $checks = Check::where('magento_id', $record->id)
-                                            ->where('url_type', 'secondary')
-                                            ->latest('checked_at')
-                                            ->take(10)
-                                            ->get();
-                                        
-                                        $checkCount = $checks->count();
-                                        
-                                        if ($checkCount === 0) {
-                                            return '<em>Geen recente controles voor Secondary URL</em>';
-                                        }
-                                        
-                                        $html = '<div class="space-y-2">';
-                                        foreach ($checks as $check) {
-                                            $statusColor = $check->status === 'Live' ? 'text-green-600' : 'text-red-600';
-                                            $html .= '<div class="flex justify-between">';
-                                            $html .= '<span>' . $check->checked_at->format('d-m-Y H:i:s') . '</span>';
-                                            $html .= '<span class="' . $statusColor . ' font-medium">' . $check->status . '</span>';
-                                            $html .= '</div>';
-                                        }
-                                        $html .= '</div>';
-                                        
-                                        return $html;
-                                    })
-                            ]),
-                        
-                        Tab::make('URL .3')
-                            ->schema([
-                                TextEntry::make('tertiary_recent_checks')
-                                    ->label('Tertiary URL Checks')
-                                    ->html()
-                                    ->state(function ($record) {
-                                        if (empty($record->tertiary_url)) {
-                                            return '<em>Geen Tertiary URL ingesteld</em>';
-                                        }
-                                        
-                                        $checks = Check::where('magento_id', $record->id)
-                                            ->where('url_type', 'tertiary')
-                                            ->latest('checked_at')
-                                            ->take(10)
-                                            ->get();
-                                        
-                                        $checkCount = $checks->count();
-                                        
-                                        if ($checkCount === 0) {
-                                            return '<em>Geen recente controles voor Tertiary URL</em>';
-                                        }
-                                        
-                                        $html = '<div class="space-y-2">';
-                                        foreach ($checks as $check) {
-                                            $statusColor = $check->status === 'Live' ? 'text-green-600' : 'text-red-600';
-                                            $html .= '<div class="flex justify-between">';
-                                            $html .= '<span>' . $check->checked_at->format('d-m-Y H:i:s') . '</span>';
-                                            $html .= '<span class="' . $statusColor . ' font-medium">' . $check->status . '</span>';
-                                            $html .= '</div>';
-                                        }
-                                        $html .= '</div>';
-                                        
-                                        return $html;
-                                    })
-                            ]),
+                Section::make('Recent Checks')
+                    ->headerActions([
+                        InfolistAction::make('change_checks_limit')
+                        ->label(function() {
+                            return 'Show Checks: ' . $this->checksLimit;
+                        })
+                        ->icon('heroicon-o-adjustments-horizontal')
+                        ->form([
+                            Select::make('checksLimit')
+                                ->label('Number of checks to display')
+                                ->options([
+                                    5 => '5 checks',
+                                    10 => '10 checks',
+                                    25 => '25 checks',
+                                    50 => '50 checks',
+                                    100 => '100 checks',
+                                ])
+                                ->default(function($livewire) {
+                                    return $livewire->checksLimit;
+                                })
+                                ->required(),
+                        ])
+                        ->action(function (array $data): void {
+                            $this->checksLimit = $data['checksLimit'];
+                            
+                            Notification::make()
+                                ->title('Display Updated')
+                                ->body("Now showing {$this->checksLimit} recent checks.")
+                                ->success()
+                                ->send();
+                        })
+                        ->color('gray'),
+                    ])
+                    ->schema([
+                        Tabs::make('checks_tabs')
+                            ->tabs([
+                                Tab::make('All URLs')
+                                    ->schema([
+                                        TextEntry::make('all_recent_checks')
+                                            ->label("Showing {$this->checksLimit} Recent Checks")  // Fixed: Using string instead of closure
+                                            ->html()
+                                            ->state(function ($record) {
+                                                $checks = $record->checks()->latest('checked_at')->take($this->checksLimit)->get();
+                                                
+                                                if ($checks->isEmpty()) {
+                                                    return '<em>Geen recente controles</em>';
+                                                }
+                                                
+                                                $html = '<div class="space-y-2">';
+                                                foreach ($checks as $check) {
+                                                    $statusColor = $check->status === 'Live' ? 'text-green-600' : 'text-red-600';
+                                                    $urlType = ucfirst($check->url_type);
+                                                    $html .= '<div class="flex justify-between">';
+                                                    $html .= '<span>' . $check->checked_at->format('d-m-Y H:i:s') . '</span>';
+                                                    $html .= '<span class="mx-4 text-gray-600">' . $urlType . ' URL</span>';
+                                                    $html .= '<span class="' . $statusColor . ' font-medium">' . $check->status . '</span>';
+                                                    $html .= '</div>';
+                                                }
+                                                $html .= '</div>';
+                                                
+                                                return $html;
+                                            })
+                                    ]),
+                                
+                                Tab::make('URL .1')
+                                    ->schema([
+                                        TextEntry::make('primary_recent_checks')
+                                            ->label("Showing {$this->checksLimit} Primary URL Checks")  // Fixed: Using string instead of closure
+                                            ->html()
+                                            ->state(function ($record) {
+                                                $checks = $record->checks()
+                                                    ->where('url_type', 'primary')
+                                                    ->latest('checked_at')
+                                                    ->take($this->checksLimit)
+                                                    ->get();
+                                                
+                                                if ($checks->isEmpty()) {
+                                                    return '<em>Geen recente controles voor Primary URL</em>';
+                                                }
+                                                
+                                                $html = '<div class="space-y-2">';
+                                                foreach ($checks as $check) {
+                                                    $statusColor = $check->status === 'Live' ? 'text-green-600' : 'text-red-600';
+                                                    $html .= '<div class="flex justify-between">';
+                                                    $html .= '<span>' . $check->checked_at->format('d-m-Y H:i:s') . '</span>';
+                                                    $html .= '<span class="' . $statusColor . ' font-medium">' . $check->status . '</span>';
+                                                    $html .= '</div>';
+                                                }
+                                                $html .= '</div>';
+                                                
+                                                return $html;
+                                            })
+                                    ]),
+                                
+                                Tab::make('URL .2')
+                                    ->schema([
+                                        TextEntry::make('secondary_recent_checks')
+                                            ->label("Showing {$this->checksLimit} Secondary URL Checks")  // Fixed: Using string instead of closure
+                                            ->html()
+                                            ->state(function ($record) {
+                                                if (empty($record->secondary_url)) {
+                                                    return '<em>Geen Secondary URL ingesteld</em>';
+                                                }
+                                                
+                                                $checks = Check::where('magento_id', $record->id)
+                                                    ->where('url_type', 'secondary')
+                                                    ->latest('checked_at')
+                                                    ->take($this->checksLimit)
+                                                    ->get();
+                                                
+                                                $checkCount = $checks->count();
+                                                
+                                                if ($checkCount === 0) {
+                                                    return '<em>Geen recente controles voor Secondary URL</em>';
+                                                }
+                                                
+                                                $html = '<div class="space-y-2">';
+                                                foreach ($checks as $check) {
+                                                    $statusColor = $check->status === 'Live' ? 'text-green-600' : 'text-red-600';
+                                                    $html .= '<div class="flex justify-between">';
+                                                    $html .= '<span>' . $check->checked_at->format('d-m-Y H:i:s') . '</span>';
+                                                    $html .= '<span class="' . $statusColor . ' font-medium">' . $check->status . '</span>';
+                                                    $html .= '</div>';
+                                                }
+                                                $html .= '</div>';
+                                                
+                                                return $html;
+                                            })
+                                    ]),
+                                
+                                Tab::make('URL .3')
+                                    ->schema([
+                                        TextEntry::make('tertiary_recent_checks')
+                                            ->label("Showing {$this->checksLimit} Tertiary URL Checks")  // Fixed: Using string instead of closure
+                                            ->html()
+                                            ->state(function ($record) {
+                                                if (empty($record->tertiary_url)) {
+                                                    return '<em>Geen Tertiary URL ingesteld</em>';
+                                                }
+                                                
+                                                $checks = Check::where('magento_id', $record->id)
+                                                    ->where('url_type', 'tertiary')
+                                                    ->latest('checked_at')
+                                                    ->take($this->checksLimit)
+                                                    ->get();
+                                                
+                                                $checkCount = $checks->count();
+                                                
+                                                if ($checkCount === 0) {
+                                                    return '<em>Geen recente controles voor Tertiary URL</em>';
+                                                }
+                                                
+                                                $html = '<div class="space-y-2">';
+                                                foreach ($checks as $check) {
+                                                    $statusColor = $check->status === 'Live' ? 'text-green-600' : 'text-red-600';
+                                                    $html .= '<div class="flex justify-between">';
+                                                    $html .= '<span>' . $check->checked_at->format('d-m-Y H:i:s') . '</span>';
+                                                    $html .= '<span class="' . $statusColor . ' font-medium">' . $check->status . '</span>';
+                                                    $html .= '</div>';
+                                                }
+                                                $html .= '</div>';
+                                                
+                                                return $html;
+                                            })
+                                    ]),
+                            ])
                     ])
             ]);
     }
