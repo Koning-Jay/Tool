@@ -164,9 +164,7 @@ class CustomchecksResource extends Resource
                         'ram' => 'Memory Usage',
                         'sales' => 'Sales Performance',
                     ]),
-          
-                    
-                Tables\Filters\TernaryFilter::make('is_active')
+                    Tables\Filters\TernaryFilter::make('is_active')
                     ->label('Active'),
             ])
             ->actions([
