@@ -222,6 +222,34 @@ class ViewMagento extends ViewRecord
                             ->label('API Key')
                             ->visible(fn ($record) => filled($record->api_key)),
                         
+                            Section::make('System Usage')
+                            ->schema([
+                                TextEntry::make('ram_usage')
+                                    ->label('RAM Usage')
+                                    ->state(function () {
+                                        $data = MagentoResource::getSystemTestData();
+    
+                                        if (!isset($data['ram']) || !isset($data['ram']['usage_percent'])) {
+                                            return 'No RAM Data';
+                                        }
+    
+                                        return $data['ram']['usage_percent'] . '% (' . $data['ram']['used_mb'] . ' MB used of ' . $data['ram']['total_mb'] . ' MB)';
+                                    }),
+    
+                                TextEntry::make('disk_usage')
+                                    ->label('Disk Usage')
+                                    ->state(function () {
+                                        $data = MagentoResource::getSystemTestData();
+    
+                                        if (!isset($data['disk']) || !isset($data['disk']['usage_percent'])) {
+                                            return 'No Disk Data';
+                                        }
+    
+                                        return $data['disk']['usage_percent'] . '% (' . $data['disk']['used_gb'] . ' GB used of ' . $data['disk']['total_gb'] . ' GB)';
+                                    }),
+                            ]),
+
+                            
                         TextEntry::make('created_at')
                             ->label('Made on')
                             ->dateTime(),

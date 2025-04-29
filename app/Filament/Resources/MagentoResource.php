@@ -132,22 +132,32 @@ class MagentoResource extends Resource
                     })
                     ->badge()
                     ->color(fn (string $state): string => $state === 'Live' ? 'success' : 'danger'),
-                    TextColumn::make('system_ram_usage')
-                    ->label('RAM Usage')
+                   
+                    TextColumn::make('ram_usage')
+                    
+                    ->label('Ram')
                     ->state(function () {
                         $data = MagentoResource::getSystemTestData();
-                        return $data['ram']
-                            ? $data['ram']['usage_percent'] . '%'
-                            : 'No Data';
+                        
+                        if (!isset($data['ram']) || !isset($data['ram']['usage_percent'])) {
+                            return 'No Ram Data';
+                        }
+                
+                        return $data['ram']['usage_percent'] . '%';
                     }),
+                
                     TextColumn::make('disk_usage')
                     ->label('Disk Usage')
                     ->state(function () {
                         $data = MagentoResource::getSystemTestData();
-                        return is_array($data['disk'] ?? null)
-                            ? ($data['disk']['usage_percent'] ?? 'Missing %') . '%'
-                            : 'No Disk Data';
+                        
+                        if (!isset($data['disk']) || !isset($data['disk']['usage_percent'])) {
+                            return 'No Disk Data';
+                        }
+                
+                        return $data['disk']['usage_percent'] . '%';
                     }),
+                
                 
                 
                 TextColumn::make('last_checked')
