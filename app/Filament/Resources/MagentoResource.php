@@ -132,7 +132,24 @@ class MagentoResource extends Resource
                     })
                     ->badge()
                     ->color(fn (string $state): string => $state === 'Live' ? 'success' : 'danger'),
-    
+                    TextColumn::make('system_ram_usage')
+                    ->label('RAM Usage')
+                    ->state(function () {
+                        $data = MagentoResource::getSystemTestData();
+                        return $data['ram']
+                            ? $data['ram']['usage_percent'] . '%'
+                            : 'No Data';
+                    }),
+                    TextColumn::make('disk_usage')
+                    ->label('Disk Usage')
+                    ->state(function () {
+                        $data = MagentoResource::getSystemTestData();
+                        return is_array($data['disk'] ?? null)
+                            ? ($data['disk']['usage_percent'] ?? 'Missing %') . '%'
+                            : 'No Disk Data';
+                    }),
+                
+                
                 TextColumn::make('last_checked')
                     ->label('Last checked')
                     ->state(function (Magento $record) {
@@ -260,8 +277,24 @@ class MagentoResource extends Resource
         }
     }
 
+    public static function getSystemTestData(): array
+{
+    $path = storage_path('app/system_testdata.json');
+
+    if (!file_exists($path)) {
+        return [
+            'ram' => null,
+            'disk' => null,
+        ];
+    }
+
+    return json_decode(file_get_contents($path), true);
+}
+
     public static function getRelations(): array
     {
+
+        
         return [];
     }
 
