@@ -19,6 +19,7 @@ use Filament\Notifications\Notification;
 use App\Notifications\WebsiteDownNotification;
 use Filament\Forms\Components\Card;
 use Illuminate\Support\Facades\Notification as FacadesNotification;
+use Illuminate\Support\Facades\Log;
 
 class MagentoResource extends Resource
 {
@@ -26,16 +27,13 @@ class MagentoResource extends Resource
     protected static ?string $navigationIcon = 'heroicon-s-computer-desktop';
     protected static ?string $navigationGroup = 'Monitoring';
     protected static ?string $label = 'Domains';
-
-
     protected static ?string $navigationLabel = 'Domains';
+    protected static string $notificationEmail = 'Jay@wedigify.nl';
 
     public static function getNavigationBadge(): ?string
     {
         return static::getModel()::count();
     }
-
-
 
     public static function form(Form $form): Form
     {
@@ -127,6 +125,9 @@ class MagentoResource extends Resource
                             $tertiaryStatus = $tertiaryCheck ? $tertiaryCheck->status : self::checkWebsiteStatus($record->tertiary_url, 'tertiary')['status'];
                             $statuses[] = $tertiaryStatus;
                         }
+
+                        // Check custom metrics
+                        self::checkCustomMetrics($record);
                         
                         return in_array('Down', $statuses) ? 'Down' : 'Live';
                     })
@@ -134,7 +135,6 @@ class MagentoResource extends Resource
                     ->color(fn (string $state): string => $state === 'Live' ? 'success' : 'danger'),
                    
                     TextColumn::make('ram_usage')
-                    
                     ->label('Ram')
                     ->state(function () {
                         $data = MagentoResource::getSystemTestData();
@@ -169,8 +169,6 @@ class MagentoResource extends Resource
                         return $data['cpu']['usage_percent'] . '%';
                     }),
                 
-                
-                
                 TextColumn::make('last_checked')
                     ->label('Last checked')
                     ->state(function (Magento $record) {
@@ -178,7 +176,6 @@ class MagentoResource extends Resource
                         return $latestCheck ? $latestCheck->checked_at->diffForHumans() : 'Nooit';
                     }),
     
-
             ])
             ->filters([])
             ->actions([
@@ -258,6 +255,9 @@ class MagentoResource extends Resource
                             }
                         }
     
+                        // Check custom metrics
+                        self::checkCustomMetrics($record);
+    
                         $overallStatus = ($primaryStatus === 'Down' || 
                                         ($secondaryStatus === 'Down' && !empty($record->secondary_url)) || 
                                         ($tertiaryStatus === 'Down' && !empty($record->tertiary_url))) 
@@ -279,6 +279,164 @@ class MagentoResource extends Resource
             );
     }
 
+    /**
+     * Check custom metrics and send notifications if thresholds are exceeded
+     */
+    public static function checkCustomMetrics(Magento $record): void
+    {
+        // Get system metrics
+        $systemData = self::getSystemTestData();
+        
+        // Get all custom checks for this Magento record
+        $customChecks = $record->customchecks;
+        
+        if ($customChecks->isEmpty()) {
+            return;
+        }
+        
+        foreach ($customChecks as $check) {
+            // Skip CPU load check type as it's being removed or inactive checks
+            if ($check->check_type === 'cpu_load' || !$check->is_active) {
+                continue;
+            }
+            
+            // Get type name for notifications
+            $typeName = match($check->check_type) {
+                'cpu' => 'CPU Usage',
+                'ram' => 'Memory Usage',
+                'disk' => 'Disk Space',
+                default => $check->check_type
+            };
+            
+            $suffix = match ($check->check_type) {
+                'cpu', 'ram', 'disk' => '%',
+                default => '',
+            };
+            
+            // Check if the custom metric is triggered
+            $currentValue = null;
+            $isTriggered = false;
+            
+            if ($check->check_type === 'cpu' && isset($systemData['cpu']['usage_percent'])) {
+                $currentValue = $systemData['cpu']['usage_percent'];
+                
+                // Determine if check is triggered based on comparison operator
+                if ($check->comparison_operator === 'Greater than') {
+                    $isTriggered = $currentValue > $check->threshold_value;
+                } elseif ($check->comparison_operator === 'Less than') {
+                    $isTriggered = $currentValue < $check->threshold_value;
+                } elseif ($check->comparison_operator === 'Equal to') {
+                    $isTriggered = $currentValue == $check->threshold_value;
+                }
+                
+                // Send notification if check is triggered
+                if ($isTriggered) {
+                    self::sendCustomCheckNotification($record, $check, $typeName, $currentValue, $suffix);
+                }
+            } elseif ($check->check_type === 'ram' && isset($systemData['ram']['usage_percent'])) {
+                $currentValue = $systemData['ram']['usage_percent'];
+                
+                // Determine if check is triggered
+                if ($check->comparison_operator === 'Greater than') {
+                    $isTriggered = $currentValue > $check->threshold_value;
+                } elseif ($check->comparison_operator === 'Less than') {
+                    $isTriggered = $currentValue < $check->threshold_value;
+                } elseif ($check->comparison_operator === 'Equal to') {
+                    $isTriggered = $currentValue == $check->threshold_value;
+                }
+                
+                // Send notification if check is triggered
+                if ($isTriggered) {
+                    self::sendCustomCheckNotification($record, $check, $typeName, $currentValue, $suffix);
+                }
+            } elseif ($check->check_type === 'disk' && isset($systemData['disk']['usage_percent'])) {
+                $currentValue = $systemData['disk']['usage_percent'];
+                
+                // Determine if check is triggered
+                if ($check->comparison_operator === 'Greater than') {
+                    $isTriggered = $currentValue > $check->threshold_value;
+                } elseif ($check->comparison_operator === 'Less than') {
+                    $isTriggered = $currentValue < $check->threshold_value;
+                } elseif ($check->comparison_operator === 'Equal to') {
+                    $isTriggered = $currentValue == $check->threshold_value;
+                }
+                
+                // Send notification if check is triggered
+                if ($isTriggered) {
+                    self::sendCustomCheckNotification($record, $check, $typeName, $currentValue, $suffix);
+                }
+            }
+        }
+    }
+
+    /**
+     * Send notification for custom check
+     */
+    protected static function sendCustomCheckNotification($record, $check, $typeName, $currentValue, $suffix): bool
+    {
+        $magento = $record->name;
+        $subject = "ALERT: {$check->name} check triggered for {$magento}";
+        $message = "The {$check->name} check has been triggered for {$magento}.\n\n" .
+                   "Current {$typeName}: {$currentValue}{$suffix}\n" .
+                   "Threshold: {$check->comparison_operator} {$check->threshold_value}{$suffix}\n\n" .
+                   "This alert was generated on " . now()->format('Y-m-d H:i:s');
+        
+        try {
+            // Log the notification for testing/debugging
+            Log::info('ALERT NOTIFICATION WOULD BE SENT', [
+                'subject' => $subject,
+                'message' => $message,
+                'to' => self::$notificationEmail
+            ]);
+            
+            // Show UI notification
+            Notification::make()
+                ->title('Alert Triggered')
+                ->body("{$check->name} check for {$magento} has been triggered. Current value: {$currentValue}{$suffix}")
+                ->warning()
+                ->send();
+            
+            // Return true to simulate successful sending
+            return true;
+            
+            /* Uncomment for actual email sending implementation
+            $mailchimpApiKey = config('services.mailchimp.api_key');
+            $mailchimpServerPrefix = config('services.mailchimp.server_prefix');
+            $fromEmail = config('services.mailchimp.from_email', 'notifications@wedigify.nl');
+            $fromName = config('services.mailchimp.from_name', 'Wedigify Monitoring');
+    
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $mailchimpApiKey,
+                'Content-Type' => 'application/json',
+            ])->post("https://{$mailchimpServerPrefix}.api.mailchimp.com/3.0/messages/send-template", [
+                'template_name' => 'alert-notification',
+                'template_content' => [],
+                'message' => [
+                    'subject' => $subject,
+                    'from_email' => $fromEmail,
+                    'from_name' => $fromName,
+                    'to' => [
+                        [
+                            'email' => self::$notificationEmail,
+                            'type' => 'to'
+                        ]
+                    ],
+                    'global_merge_vars' => [
+                        [
+                            'name' => 'ALERT_MESSAGE',
+                            'content' => $message
+                        ]
+                    ]
+                ]
+            ]);
+    
+            return $response->successful();
+            */
+        } catch (\Exception $e) {
+            Log::error('Failed to send notification: ' . $e->getMessage());
+            return false;
+        }
+    }
  
     public static function checkWebsiteStatus(string $url, string $urlType = 'primary'): array
     {
@@ -294,28 +452,29 @@ class MagentoResource extends Resource
             return [
                 'status' => 'Down',
                 'url_type' => $urlType
+                
             ];
+            
         }
     }
 
     public static function getSystemTestData(): array
-{
-    $path = storage_path('app/system_testdata.json');
+    {
+        $path = storage_path('app/system_testdata.json');
 
-    if (!file_exists($path)) {
-        return [
-            'ram' => null,
-            'disk' => null,
-        ];
+        if (!file_exists($path)) {
+            return [
+                'ram' => null,
+                'disk' => null,
+                'cpu' => null,
+            ];
+        }
+
+        return json_decode(file_get_contents($path), true);
     }
-
-    return json_decode(file_get_contents($path), true);
-}
 
     public static function getRelations(): array
     {
-
-        
         return [];
     }
 

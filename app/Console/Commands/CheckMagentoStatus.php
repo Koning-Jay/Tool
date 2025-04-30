@@ -113,7 +113,7 @@ class CheckMagentoStatus extends Command
             foreach ($emails as $email) {
                 $email = trim($email);
                 if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                    try {
+                    try { 
                         Log::info("Sending notification to {$email}");
                         FacadesNotification::route('mail', $email)
                             ->notify(new WebsiteDownNotification($magento, $urlType));

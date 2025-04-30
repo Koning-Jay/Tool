@@ -20,6 +20,8 @@ class CustomchecksResource extends Resource
     protected static ?string $navigationGroup = 'Monitoring';
     protected static ?int $navigationSort = 3;
 
+
+
     public static function form(Form $form): Form
     {
         return $form
@@ -151,114 +153,6 @@ class CustomchecksResource extends Resource
                     ->boolean()
                     ->label('Active'),
                     
-                Tables\Columns\TextColumn::make('current_value')
-                    ->label('Current Value')
-                    ->formatStateUsing(function ($state, $record) {
-                        // Get system data for the current metric
-                        $systemData = MagentoResource::getSystemTestData();
-                        
-                        $currentValue = null;
-                        $isTriggered = false;
-                        $suffix = '';
-                        
-                        if ($record->check_type === 'cpu' && isset($systemData['cpu']['usage_percent'])) {
-                            $currentValue = $systemData['cpu']['usage_percent'];
-                            $suffix = '%';
-                            
-                            // Determine if check is triggered
-                            if ($record->comparison_operator === 'Greater than') {
-                                $isTriggered = $currentValue > $record->threshold_value;
-                            } elseif ($record->comparison_operator === 'Less than') {
-                                $isTriggered = $currentValue < $record->threshold_value;
-                            } elseif ($record->comparison_operator === 'Equal to') {
-                                $isTriggered = $currentValue == $record->threshold_value;
-                            }
-                        } elseif ($record->check_type === 'cpu_load' && isset($systemData['cpu']['load_avg'])) {
-                            $currentValue = $systemData['cpu']['load_avg'];
-                            
-                            // Determine if check is triggered
-                            if ($record->comparison_operator === 'Greater than') {
-                                $isTriggered = $currentValue > $record->threshold_value;
-                            } elseif ($record->comparison_operator === 'Less than') {
-                                $isTriggered = $currentValue < $record->threshold_value;
-                            } elseif ($record->comparison_operator === 'Equal to') {
-                                $isTriggered = $currentValue == $record->threshold_value;
-                            }
-                        } elseif ($record->check_type === 'ram' && isset($systemData['ram']['usage_percent'])) {
-                            $currentValue = $systemData['ram']['usage_percent'];
-                            $suffix = '%';
-                            
-                            // Determine if check is triggered
-                            if ($record->comparison_operator === 'Greater than') {
-                                $isTriggered = $currentValue > $record->threshold_value;
-                            } elseif ($record->comparison_operator === 'Less than') {
-                                $isTriggered = $currentValue < $record->threshold_value;
-                            } elseif ($record->comparison_operator === 'Equal to') {
-                                $isTriggered = $currentValue == $record->threshold_value;
-                            }
-                        } elseif ($record->check_type === 'disk' && isset($systemData['disk']['usage_percent'])) {
-                            $currentValue = $systemData['disk']['usage_percent'];
-                            $suffix = '%';
-                            
-                            // Determine if check is triggered
-                            if ($record->comparison_operator === 'Greater than') {
-                                $isTriggered = $currentValue > $record->threshold_value;
-                            } elseif ($record->comparison_operator === 'Less than') {
-                                $isTriggered = $currentValue < $record->threshold_value;
-                            } elseif ($record->comparison_operator === 'Equal to') {
-                                $isTriggered = $currentValue == $record->threshold_value;
-                            }
-                        }
-                        
-                        if ($currentValue === null) {
-                            return 'N/A';
-                        }
-                        
-                        $color = $isTriggered ? 'text-red-600 font-bold' : 'text-green-600';
-                        return '<span class="' . $color . '">' . $currentValue . $suffix . '</span>';
-                    })
-                    ->html(),
-                    
-                Tables\Columns\BadgeColumn::make('status')
-                    ->label('Status')
-                    ->getStateUsing(function ($record) {
-                        // Get system data for the current metric
-                        $systemData = MagentoResource::getSystemTestData();
-                        
-                        $currentValue = null;
-                        
-                        if ($record->check_type === 'cpu' && isset($systemData['cpu']['usage_percent'])) {
-                            $currentValue = $systemData['cpu']['usage_percent'];
-                        } elseif ($record->check_type === 'cpu_load' && isset($systemData['cpu']['load_avg'])) {
-                            $currentValue = $systemData['cpu']['load_avg'];
-                        } elseif ($record->check_type === 'ram' && isset($systemData['ram']['usage_percent'])) {
-                            $currentValue = $systemData['ram']['usage_percent'];
-                        } elseif ($record->check_type === 'disk' && isset($systemData['disk']['usage_percent'])) {
-                            $currentValue = $systemData['disk']['usage_percent'];
-                        }
-                        
-                        if ($currentValue === null) {
-                            return 'Unknown';
-                        }
-                        
-                        $isTriggered = false;
-                        
-                        if ($record->comparison_operator === 'Greater than') {
-                            $isTriggered = $currentValue > $record->threshold_value;
-                        } elseif ($record->comparison_operator === 'Less than') {
-                            $isTriggered = $currentValue < $record->threshold_value;
-                        } elseif ($record->comparison_operator === 'Equal to') {
-                            $isTriggered = $currentValue == $record->threshold_value;
-                        }
-                        
-                        return $isTriggered ? 'Triggered' : 'Normal';
-                    })
-                    ->colors([
-                        'success' => 'Normal',
-                        'danger' => 'Triggered',
-                        'gray' => 'Unknown',
-                    ]),
-                    
                 Tables\Columns\TextColumn::make('magentos.name')
                     ->label('Assigned Pages')
                     ->listWithLineBreaks()
@@ -273,23 +167,7 @@ class CustomchecksResource extends Resource
                     ]),
                 Tables\Filters\TernaryFilter::make('is_active')
                     ->label('Active'),
-                Tables\Filters\SelectFilter::make('status')
-                    ->label('Status')
-                    ->options([
-                        'Normal' => 'Normal',
-                        'Triggered' => 'Triggered',
-                    ])
-                    ->query(function (Builder $query, array $data) {
-                        $value = $data['value'];
-                        
-                        if ($value === null) {
-                            return $query;
-                        }
-                        
-                        // This is a placeholder - in a real app you would need to implement logic
-                        // to filter based on the current system status compared to the threshold
-                        return $query;
-                    }),
+
             ])
             ->actions([
                 Tables\Actions\EditAction::make(),

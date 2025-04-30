@@ -34,4 +34,5 @@ class ListMagentos extends ListRecords
                 ->modalDescription('Weet je zeker dat je alle websites wilt controleren? Dit kan even duren.'),
         ];
     }
+    
 }

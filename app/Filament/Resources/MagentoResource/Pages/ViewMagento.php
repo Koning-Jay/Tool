@@ -587,7 +587,6 @@ class ViewMagento extends ViewRecord
                                                                         ->title('Alert Email Sent')
                                                                         ->body("An alert email for {$check->name} would be sent to {$this->notificationEmail}")
                                                                         ->warning()
-                                                                        ->persistent()
                                                                         ->send();
                                                                 }
                                                             }
@@ -648,8 +647,6 @@ class ViewMagento extends ViewRecord
                                                                     Notification::make()
                                                                         ->title('Alert Email Sent')
                                                                         ->body("An alert email for {$check->name} would be sent to {$this->notificationEmail}")
-                                                                        ->warning()
-                                                                        ->persistent()
                                                                         ->send();
                                                                 }
                                                             }
@@ -724,6 +721,7 @@ class ViewMagento extends ViewRecord
                                                     
                                                         $html .= '</div>';
                                                     }
+                                                    
                                                     $html .= '</div>';
                             
                                                     return $html;
@@ -731,7 +729,7 @@ class ViewMagento extends ViewRecord
                                                 
                                         ]),
                                 ])
-                                ->columnSpanFull() // Ensure the tab spans the full width
+                                ->columnSpanFull() 
                     ]),
             ]);
             
