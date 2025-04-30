@@ -157,6 +157,17 @@ class MagentoResource extends Resource
                 
                         return $data['disk']['usage_percent'] . '%';
                     }),
+                    TextColumn::make('cpu_usage')
+                    ->label('Cpu Usage')
+                    ->state(function () {
+                        $data = MagentoResource::getSystemTestData();
+                        
+                        if (!isset($data['cpu']) || !isset($data['cpu']['usage_percent'])) {
+                            return 'No Disk Data';
+                        }
+                
+                        return $data['cpu']['usage_percent'] . '%';
+                    }),
                 
                 
                 

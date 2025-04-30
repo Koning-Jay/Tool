@@ -17,6 +17,8 @@ use Filament\Infolists\Components\Tabs\Tab;
 use Filament\Forms\Components\Select;
 use Filament\Infolists\Components\Actions as InfolistActions;
 use Filament\Infolists\Components\Actions\Action as InfolistAction;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class ViewMagento extends ViewRecord
 {
@@ -24,6 +26,8 @@ class ViewMagento extends ViewRecord
     
     // Add a property to store the selected number of checks to display
     public int $checksLimit = 10;
+    protected string $notificationEmail = 'Jay@wedigify.nl';
+
 
     protected function getHeaderActions(): array
     {
@@ -76,10 +80,40 @@ class ViewMagento extends ViewRecord
                         ->body("All URLs for {$record->name} have been checked.")
                         ->success()
                         ->send();
+
                         
-                    $this->redirect($this->getResource()::getUrl('view', ['record' => $record]));
-                })
+                        
+                        $this->sendMailchimpNotification(
+                            "Test Alert: Manual Check Triggered",
+                            "This is a test alert triggered manually for {$record->name}.\n\n" .
+                            "This alert was generated on " . now()->format('Y-m-d H:i:s')
+                        );
+                
+                        Notification::make()
+                            ->title('Website Checked')
+                            ->body("All URLs for {$record->name} have been checked.")
+                            ->success()
+                            ->send();
+                
+                        return redirect($this->getResource()::getUrl('view', ['record' => $record]));
+                    })
                 ->color('primary'),
+                
+            Actions\Action::make('refresh_metrics')
+                ->label('Refresh Metrics')
+                ->icon('heroicon-o-chart-bar')
+                ->action(function () {
+                    Notification::make()
+                        ->title('System Metrics Refreshed')
+                        ->body("The system metrics have been refreshed.")
+                        ->success()
+                        ->send();
+
+                        
+                        
+                    $this->redirect($this->getResource()::getUrl('view', ['record' => $this->getRecord()]));
+                })
+                ->color('success'),
         ];
     }
 
@@ -222,7 +256,7 @@ class ViewMagento extends ViewRecord
                             ->label('API Key')
                             ->visible(fn ($record) => filled($record->api_key)),
                         
-                            Section::make('System Usage')
+                        Section::make('Current System Usage')
                             ->schema([
                                 TextEntry::make('ram_usage')
                                     ->label('RAM Usage')
@@ -247,8 +281,19 @@ class ViewMagento extends ViewRecord
     
                                         return $data['disk']['usage_percent'] . '% (' . $data['disk']['used_gb'] . ' GB used of ' . $data['disk']['total_gb'] . ' GB)';
                                     }),
+                                    
+                                TextEntry::make('cpu_usage')
+                                    ->label('CPU Usage')
+                                    ->state(function () {
+                                        $data = MagentoResource::getSystemTestData();
+    
+                                        if (!isset($data['cpu']) || !isset($data['cpu']['usage_percent'])) {
+                                            return 'No CPU Data';
+                                        }
+    
+                                        return $data['cpu']['usage_percent'] . '% (' . $data['cpu']['used_gb'] . ' GB used of ' . $data['disk']['total_gb'] . ' GB)';
+                                    }),
                             ]),
-
                             
                         TextEntry::make('created_at')
                             ->label('Made on')
@@ -462,11 +507,11 @@ class ViewMagento extends ViewRecord
                                                 ->url(CustomchecksResource::getUrl('index'))
                                                 ->color('gray'),
                                         ])
-                                        ->columnSpanFull() // Ensure the section spans the full width
+                                        ->columnSpanFull()
                                         ->schema([
                                             TextEntry::make('assigned_custom_checks')
                                                 ->label('Assigned Custom Checks')
-                                                ->columnSpanFull() // Ensure the content spans the full width
+                                                ->columnSpanFull()
                                                 ->html()
                                                 ->state(function ($record) {
                                                     $checks = $record->customchecks;
@@ -474,35 +519,145 @@ class ViewMagento extends ViewRecord
                                                     if ($checks->isEmpty()) {
                                                         return '<div class="text-gray-500 italic p-6 text-center text-lg">No custom checks assigned to this Magento page</div>';
                                                     }
-                            
+                                                    
+                                                    // Get current system metrics for comparison
+                                                    $systemData = MagentoResource::getSystemTestData();
+                                                    
                                                     // Adjust grid layout to 4 columns
                                                     $html = '<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 w-full">';
                                                     foreach ($checks as $check) {
+                                                        // Skip CPU load check type as it's being removed
+                                                        if ($check->check_type === 'cpu_load') {
+                                                            continue;
+                                                        }
+                                                        
+                                                        // Type color
                                                         $typeColor = match($check->check_type) {
                                                             'cpu' => 'bg-blue-100 text-blue-800',
                                                             'ram' => 'bg-red-100 text-red-800',
-                                                            'sales' => 'bg-green-100 text-green-800',
+                                                            'disk' => 'bg-yellow-100 text-yellow-800',
                                                             default => 'bg-gray-100 text-gray-800'
                                                         };
                                                     
+                                                        // Type name
                                                         $typeName = match($check->check_type) {
                                                             'cpu' => 'CPU Usage',
                                                             'ram' => 'Memory Usage',
-                                                            'sales' => 'Sales Performance',
+                                                            'disk' => 'Disk Space',
                                                             default => $check->check_type
                                                         };
                                                     
                                                         $suffix = match ($check->check_type) {
-                                                            'cpu', 'ram' => '%',
-                                                            'sales' => ' Sales',
+                                                            'cpu', 'ram', 'disk' => '%',
                                                             default => '',
                                                         };
                                                     
                                                         $status = $check->is_active 
                                                             ? '<span class="px-3 py-1 text-sm font-medium rounded-full bg-green-100 text-green-800">Active</span>' 
                                                             : '<span class="px-3 py-1 text-sm font-medium rounded-full bg-gray-100 text-gray-800">Inactive</span>';
-                                                    
-                                                        $html .= '<div class="border rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow duration-200">';
+                                                        
+                                                        // Get current metric value based on check type
+                                                        $currentValue = null;
+                                                        $isTriggered = false;
+                                                        
+                                                        if ($check->check_type === 'cpu' && isset($systemData['cpu']['usage_percent'])) {
+                                                            $currentValue = $systemData['cpu']['usage_percent'];
+                                                            // Determine if check is triggered based on comparison operator
+                                                            if ($check->comparison_operator === 'Greater than') {
+                                                                $isTriggered = $currentValue > $check->threshold_value;
+                                                            } elseif ($check->comparison_operator === 'Less than') {
+                                                                $isTriggered = $currentValue < $check->threshold_value;
+                                                            } elseif ($check->comparison_operator === 'Equal to') {
+                                                                $isTriggered = $currentValue == $check->threshold_value;
+                                                            }
+                                                            // Send email notification if check is triggered and active
+                                                            if ($isTriggered && $check->is_active) {
+                                                                $magento = $record->name;
+                                                                $subject = "ALERT: {$check->name} check triggered for {$magento}";
+                                                                $message = "The {$check->name} check has been triggered for {$magento}.\n\n" .
+                                                                           "Current {$typeName}: {$currentValue}{$suffix}\n" .
+                                                                           "Threshold: {$check->comparison_operator} {$check->threshold_value}{$suffix}\n\n" .
+                                                                           "This alert was generated on " . now()->format('Y-m-d H:i:s');
+                                                                            
+                                                                $notificationSent = $this->sendMailchimpNotification($subject, $message);
+                                                                
+                                                                // Show a visible UI notification for testing
+                                                                if ($notificationSent) {
+                                                                    Notification::make()
+                                                                        ->title('Alert Email Sent')
+                                                                        ->body("An alert email for {$check->name} would be sent to {$this->notificationEmail}")
+                                                                        ->warning()
+                                                                        ->persistent()
+                                                                        ->send();
+                                                                }
+                                                            }
+                                                        } elseif ($check->check_type === 'ram' && isset($systemData['ram']['usage_percent'])) {
+                                                            $currentValue = $systemData['ram']['usage_percent'];
+                                                            // Determine if check is triggered
+                                                            if ($check->comparison_operator === 'Greater than') {
+                                                                $isTriggered = $currentValue > $check->threshold_value;
+                                                            } elseif ($check->comparison_operator === 'Less than') {
+                                                                $isTriggered = $currentValue < $check->threshold_value;
+                                                            } elseif ($check->comparison_operator === 'Equal to') {
+                                                                $isTriggered = $currentValue == $check->threshold_value;
+                                                            }
+                                                            // Send email notification if check is triggered and active
+                                                            if ($isTriggered && $check->is_active) {
+                                                                $magento = $record->name;
+                                                                $subject = "ALERT: {$check->name} check triggered for {$magento}";
+                                                                $message = "The {$check->name} check has been triggered for {$magento}.\n\n" .
+                                                                           "Current {$typeName}: {$currentValue}{$suffix}\n" .
+                                                                           "Threshold: {$check->comparison_operator} {$check->threshold_value}{$suffix}\n\n" .
+                                                                           "This alert was generated on " . now()->format('Y-m-d H:i:s');
+                                                                            
+                                                                $notificationSent = $this->sendMailchimpNotification($subject, $message);
+                                                                
+                                                                // Show a visible UI notification for testing
+                                                                if ($notificationSent) {
+                                                                    Notification::make()
+                                                                        ->title('Alert Email Sent')
+                                                                        ->body("An alert email for {$check->name} would be sent to {$this->notificationEmail}")
+                                                                        ->warning()
+                                                                        ->persistent()
+                                                                        ->send();
+                                                                }
+                                                            }
+                                                        } elseif ($check->check_type === 'disk' && isset($systemData['disk']['usage_percent'])) {
+                                                            $currentValue = $systemData['disk']['usage_percent'];
+                                                            // Determine if check is triggered
+                                                            if ($check->comparison_operator === 'Greater than') {
+                                                                $isTriggered = $currentValue > $check->threshold_value;
+                                                            } elseif ($check->comparison_operator === 'Less than') {
+                                                                $isTriggered = $currentValue < $check->threshold_value;
+                                                            } elseif ($check->comparison_operator === 'Equal to') {
+                                                                $isTriggered = $currentValue == $check->threshold_value;
+                                                            }
+                                                            // Send email notification if check is triggered and active
+                                                            if ($isTriggered && $check->is_active) {
+                                                                $magento = $record->name;
+                                                                $subject = "ALERT: {$check->name} check triggered for {$magento}";
+                                                                $message = "The {$check->name} check has been triggered for {$magento}.\n\n" .
+                                                                           "Current {$typeName}: {$currentValue}{$suffix}\n" .
+                                                                           "Threshold: {$check->comparison_operator} {$check->threshold_value}{$suffix}\n\n" .
+                                                                           "This alert was generated on " . now()->format('Y-m-d H:i:s');
+                                                                            
+                                                                $notificationSent = $this->sendMailchimpNotification($subject, $message);
+                                                                
+                                                                // Show a visible UI notification for testing
+                                                                if ($notificationSent) {
+                                                                    Notification::make()
+                                                                        ->title('Alert Email Sent')
+                                                                        ->body("An alert email for {$check->name} would be sent to {$this->notificationEmail}")
+                                                                        ->warning()
+                                                                        ->persistent()
+                                                                        ->send();
+                                                                }
+                                                            }
+                                                        }
+                                                        
+                                                        $html .= '<div class="border rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow duration-200 ' . ($isTriggered ? 'border-red-300 bg-red-50' : '') . '">';
+                                                        
+                                                        // Header with name and active status
                                                         $html .= '<div class="flex items-center justify-between mb-4">';
                                                         $html .= '<div class="text-2xl font-medium">' . $check->name . '</div>';
                                                         $html .= $status;
@@ -510,11 +665,13 @@ class ViewMagento extends ViewRecord
                                                     
                                                         $html .= '<div class="space-y-4 mb-4">';
                                                     
+                                                        // Check type
                                                         $html .= '<div class="flex flex-col space-y-1">';
                                                         $html .= '<span class="text-sm text-gray-500">Type</span>';
                                                         $html .= '<span class="px-3 py-2 text-base font-medium rounded-md inline-block ' . $typeColor . '">' . $typeName . '</span>';
                                                         $html .= '</div>';
                                                     
+                                                        // Check parameters
                                                         $html .= '<div class="flex flex-col space-y-1">';
                                                         $html .= '<span class="text-sm text-gray-500">Operator</span>';
                                                         $html .= '<span class="text-base font-medium">' . $check->comparison_operator . '</span>';
@@ -524,14 +681,40 @@ class ViewMagento extends ViewRecord
                                                         $html .= '<span class="text-sm text-gray-500">Threshold</span>';
                                                         $html .= '<span class="text-base font-medium">' . $check->threshold_value . $suffix . '</span>';
                                                         $html .= '</div>';
+                                                        
+                                                        // Current value and status
+                                                        if ($currentValue !== null) {
+                                                            $valueColor = $isTriggered ? 'text-red-600 font-bold' : 'text-green-600';
+                                                            
+                                                            // Added current metric value display
+                                                            $html .= '<div class="flex flex-col space-y-1">';
+                                                            $html .= '<span class="text-sm text-gray-500">Current Value</span>';
+                                                            $html .= '<span class="text-base font-medium ' . $valueColor . '">' . $currentValue . $suffix . '</span>';
+                                                            $html .= '</div>';
+                                                            
+                                                            $html .= '<div class="flex flex-col space-y-1 mt-2">';
+                                                            $html .= '<span class="text-sm text-gray-500">Status</span>';
+                                                            $html .= $isTriggered 
+                                                                ? '<span class="px-3 py-1 text-sm font-medium rounded-full bg-red-100 text-red-800">Triggered</span>'
+                                                                : '<span class="px-3 py-1 text-sm font-medium rounded-full bg-green-100 text-green-800">Normal</span>';
+                                                            $html .= '</div>';
+                                                        } else {
+                                                            $html .= '<div class="flex flex-col space-y-1 mt-2">';
+                                                            $html .= '<span class="text-sm text-gray-500">Current Value</span>';
+                                                            $html .= '<span class="text-base font-medium text-gray-500">Not available</span>';
+                                                            $html .= '</div>';
+                                                        }
                                                     
                                                         $html .= '</div>';
                                                     
-                                                        $html .= '<div class="mt-6">';
+                                                        // Action buttons
+                                                        $html .= '<div class="mt-6 flex space-x-2">';
+                                                        
+                                                        // Edit button
                                                         $html .= '<a href="' . CustomchecksResource::getUrl('edit', ['record' => $check]) . '" 
                                                             class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm 
                                                             text-base font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 
-                                                            focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 w-full justify-center">';
+                                                            focus:outline-none focus:ring-offset-2 focus:ring-indigo-500 w-full justify-center">';
                                                         $html .= '<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">';
                                                         $html .= '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path>';
                                                         $html .= '</svg>';
@@ -545,10 +728,64 @@ class ViewMagento extends ViewRecord
                             
                                                     return $html;
                                                 }),
+                                                
                                         ]),
                                 ])
                                 ->columnSpanFull() // Ensure the tab spans the full width
                     ]),
             ]);
+            
+    }
+
+    protected function sendMailchimpNotification($subject, $message)
+    {
+        try {
+            // Log the notification for testing
+            Log::info('ALERT NOTIFICATION WOULD BE SENT', [
+                'subject' => $subject,
+                'message' => $message,
+                'to' => $this->notificationEmail
+            ]);
+            
+            // Return true to simulate successful sending
+            return true;
+            
+            /* Comment out actual Mailchimp sending for testing
+            $mailchimpApiKey = config('services.mailchimp.api_key');
+            $mailchimpServerPrefix = config('services.mailchimp.server_prefix');
+            $fromEmail = config('services.mailchimp.from_email', 'notifications@wedigify.nl');
+            $fromName = config('services.mailchimp.from_name', 'Wedigify Monitoring');
+    
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $mailchimpApiKey,
+                'Content-Type' => 'application/json',
+            ])->post("https://{$mailchimpServerPrefix}.api.mailchimp.com/3.0/messages/send-template", [
+                'template_name' => 'alert-notification',
+                'template_content' => [],
+                'message' => [
+                    'subject' => $subject,
+                    'from_email' => $fromEmail,
+                    'from_name' => $fromName,
+                    'to' => [
+                        [
+                            'email' => $this->notificationEmail,
+                            'type' => 'to'
+                        ]
+                    ],
+                    'global_merge_vars' => [
+                        [
+                            'name' => 'ALERT_MESSAGE',
+                            'content' => $message
+                        ]
+                    ]
+                ]
+            ]);
+    
+            return $response->successful();
+            */
+        } catch (\Exception $e) {
+            Log::error('Failed to send notification: ' . $e->getMessage());
+            return false;
+        }
     }
 }
