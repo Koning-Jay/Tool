@@ -7,20 +7,26 @@ use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
 
 class Kernel extends ConsoleKernel
 {
-    protected function schedule(Schedule $schedule)
+    /**
+     * Define the application's command schedule.
+     */
+    protected function schedule(Schedule $schedule): void
     {
-        // Check website status every 5 minutes
-        $schedule->command('magento:check-status --queue')
-                 ->everyFiveMinutes()
-                 ->withoutOverlapping();
-        
-        // Make sure to also schedule the queue worker to process jobs
-        $schedule->command('queue:work --stop-when-empty --queue=website-checks')
-                 ->everyMinute()
-                 ->withoutOverlapping();
+        // Collect system metrics every 5 minutes
+        $schedule->command('system:collect-metrics')
+                ->everyFiveMinutes()
+                ->appendOutputTo(storage_path('logs/metrics.log'));
+                
+        // Check website status every 10 minutes
+        $schedule->command('magento:check-status')
+                ->everyTenMinutes()
+                ->appendOutputTo(storage_path('logs/website-checks.log'));
     }
 
-    protected function commands()
+    /**
+     * Register the commands for the application.
+     */
+    protected function commands(): void
     {
         $this->load(__DIR__.'/Commands');
 

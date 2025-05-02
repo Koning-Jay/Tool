@@ -14,7 +14,7 @@ use App\Notifications\WebsiteDownNotification;
 class CheckMagentoStatus extends Command
 {
     protected $signature = 'magento:check-status {id?}';
-    protected $description = 'Check if Magento websites are live or down';
+    protected $description = 'Check if Magento websites are live or down and refresh metrics';
 
     public function handle()
     {
@@ -27,6 +27,7 @@ class CheckMagentoStatus extends Command
         }
         
         foreach ($magentos as $magento) {
+            // Check primary URL
             try {
                 $response = Http::timeout(5)->get($magento->url);
                 $primaryStatus = $response->successful() ? 'Live' : 'Down';
@@ -47,6 +48,7 @@ class CheckMagentoStatus extends Command
             
             $this->info("Website {$magento->name} (Primary URL: {$magento->url}): {$primaryStatus}");
             
+            // Check secondary URL if exists
             if (!empty($magento->secondary_url)) {
                 try {
                     $response = Http::timeout(5)->get($magento->secondary_url);
@@ -69,6 +71,7 @@ class CheckMagentoStatus extends Command
                 $this->info("Website {$magento->name} (Secondary URL: {$magento->secondary_url}): {$secondaryStatus}");
             }
             
+            // Check tertiary URL if exists
             if (!empty($magento->tertiary_url)) {
                 try {
                     $response = Http::timeout(5)->get($magento->tertiary_url);
@@ -91,7 +94,11 @@ class CheckMagentoStatus extends Command
                 $this->info("Website {$magento->name} (Tertiary URL: {$magento->tertiary_url}): {$tertiaryStatus}");
             }
             
-            Log::info("Website status check completed for: {$magento->name}");
+            // Check custom metrics for this domain
+            $this->info("Checking custom metrics for {$magento->name}...");
+            MagentoResource::checkCustomMetrics($magento);
+            
+            Log::info("Website status check and metrics completed for: {$magento->name}");
         }
         
         return Command::SUCCESS;
