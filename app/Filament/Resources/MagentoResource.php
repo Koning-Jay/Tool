@@ -182,94 +182,133 @@ class MagentoResource extends Resource
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
     
-                Tables\Actions\Action::make('check_now')
-                    ->label('Check Now')
-                    ->icon('heroicon-o-arrow-path')
-                    ->action(function (Magento $record) {
-                        try {
-                            $response = Http::timeout(5)->get($record->url);
-                            $primaryStatus = $response->successful() ? 'Live' : 'Down';
-                        } catch (\Exception $e) {
-                            $primaryStatus = 'Down';
-                        }
-    
-                        Check::create([
-                            'magento_id' => $record->id,
-                            'url_type' => 'primary',
-                            'status' => $primaryStatus,
-                            'checked_at' => now(),
-                        ]);
-    
-                        if ($primaryStatus === 'Down' && !empty($record->notification_emails)) {
-                            foreach ($record->notification_emails as $email) {
-                                FacadesNotification::route('mail', trim($email))
-                                    ->notify(new WebsiteDownNotification($record, 'primary'));
-                            }
-                        }
-    
-                        $secondaryStatus = null;
-                        if (!empty($record->secondary_url)) {
-                            try {
-                                $response = Http::timeout(5)->get($record->secondary_url);
-                                $secondaryStatus = $response->successful() ? 'Live' : 'Down';
-                            } catch (\Exception $e) {
-                                $secondaryStatus = 'Down';
-                            }
-    
-                            Check::create([
-                                'magento_id' => $record->id,
-                                'url_type' => 'secondary',
-                                'status' => $secondaryStatus,
-                                'checked_at' => now(),
-                            ]);
-    
-                            if ($secondaryStatus === 'Down' && !empty($record->notification_emails)) {
-                                foreach ($record->notification_emails as $email) {
-                                    FacadesNotification::route('mail', trim($email))
-                                        ->notify(new WebsiteDownNotification($record, 'secondary'));
-                                }
-                            }
-                        }
-    
-                        $tertiaryStatus = null;
-                        if (!empty($record->tertiary_url)) {
-                            try {
-                                $response = Http::timeout(5)->get($record->tertiary_url);
-                                $tertiaryStatus = $response->successful() ? 'Live' : 'Down';
-                            } catch (\Exception $e) {
-                                $tertiaryStatus = 'Down';
-                            }
-    
-                            Check::create([
-                                'magento_id' => $record->id,
-                                'url_type' => 'tertiary',
-                                'status' => $tertiaryStatus,
-                                'checked_at' => now(),
-                            ]);
-    
-                            if ($tertiaryStatus === 'Down' && !empty($record->notification_emails)) {
-                                foreach ($record->notification_emails as $email) {
-                                    FacadesNotification::route('mail', trim($email))
-                                        ->notify(new WebsiteDownNotification($record, 'tertiary'));
-                                }
-                            }
-                        }
-    
-                        // Check custom metrics
-                        self::checkCustomMetrics($record);
-    
-                        $overallStatus = ($primaryStatus === 'Down' || 
-                                        ($secondaryStatus === 'Down' && !empty($record->secondary_url)) || 
-                                        ($tertiaryStatus === 'Down' && !empty($record->tertiary_url))) 
-                                        ? 'Down' : 'Live';
-    
-                        Notification::make()
-                            ->title('Website Checked')
-                            ->body("{$record->name} status: {$overallStatus}")
-                            ->success()
-                            ->send();
-                    })
-                    ->color('success'),
+                /**
+ * Modified check_now action with disabled email sending
+ */
+Tables\Actions\Action::make('check_now')
+->label('Check Now')
+->icon('heroicon-o-arrow-path')
+->action(function (Magento $record) {
+    try {
+        $response = Http::timeout(5)->get($record->url);
+        $primaryStatus = $response->successful() ? 'Live' : 'Down';
+    } catch (\Exception $e) {
+        $primaryStatus = 'Down';
+    }
+
+    Check::create([
+        'magento_id' => $record->id,
+        'url_type' => 'primary',
+        'status' => $primaryStatus,
+        'checked_at' => now(),
+    ]);
+
+    if ($primaryStatus === 'Down' && !empty($record->notification_emails)) {
+        // Log instead of sending emails
+        Log::warning('WEBSITE DOWN ALERT (EMAIL DISABLED)', [
+            'website' => $record->name,
+            'url' => $record->url,
+            'url_type' => 'primary',
+            'recipients_would_be' => $record->notification_emails,
+            'timestamp' => now()->format('Y-m-d H:i:s')
+        ]);
+        
+        // Uncomment when Mailtrap issue is resolved
+        /*
+        foreach ($record->notification_emails as $email) {
+            FacadesNotification::route('mail', trim($email))
+                ->notify(new WebsiteDownNotification($record, 'primary'));
+        }
+        */
+    }
+
+    $secondaryStatus = null;
+    if (!empty($record->secondary_url)) {
+        try {
+            $response = Http::timeout(5)->get($record->secondary_url);
+            $secondaryStatus = $response->successful() ? 'Live' : 'Down';
+        } catch (\Exception $e) {
+            $secondaryStatus = 'Down';
+        }
+
+        Check::create([
+            'magento_id' => $record->id,
+            'url_type' => 'secondary',
+            'status' => $secondaryStatus,
+            'checked_at' => now(),
+        ]);
+
+        if ($secondaryStatus === 'Down' && !empty($record->notification_emails)) {
+            // Log instead of sending emails
+            Log::warning('WEBSITE DOWN ALERT (EMAIL DISABLED)', [
+                'website' => $record->name,
+                'url' => $record->secondary_url,
+                'url_type' => 'secondary',
+                'recipients_would_be' => $record->notification_emails,
+                'timestamp' => now()->format('Y-m-d H:i:s')
+            ]);
+            
+            // Uncomment when Mailtrap issue is resolved
+            /*
+            foreach ($record->notification_emails as $email) {
+                FacadesNotification::route('mail', trim($email))
+                    ->notify(new WebsiteDownNotification($record, 'secondary'));
+            }
+            */
+        }
+    }
+
+    $tertiaryStatus = null;
+    if (!empty($record->tertiary_url)) {
+        try {
+            $response = Http::timeout(5)->get($record->tertiary_url);
+            $tertiaryStatus = $response->successful() ? 'Live' : 'Down';
+        } catch (\Exception $e) {
+            $tertiaryStatus = 'Down';
+        }
+
+        Check::create([
+            'magento_id' => $record->id,
+            'url_type' => 'tertiary',
+            'status' => $tertiaryStatus,
+            'checked_at' => now(),
+        ]);
+
+        if ($tertiaryStatus === 'Down' && !empty($record->notification_emails)) {
+            // Log instead of sending emails
+            Log::warning('WEBSITE DOWN ALERT (EMAIL DISABLED)', [
+                'website' => $record->name,
+                'url' => $record->tertiary_url,
+                'url_type' => 'tertiary',
+                'recipients_would_be' => $record->notification_emails,
+                'timestamp' => now()->format('Y-m-d H:i:s')
+            ]);
+            
+            // Uncomment when Mailtrap issue is resolved
+            /*
+            foreach ($record->notification_emails as $email) {
+                FacadesNotification::route('mail', trim($email))
+                    ->notify(new WebsiteDownNotification($record, 'tertiary'));
+            }
+            */
+        }
+    }
+
+    // Check custom metrics
+    self::checkCustomMetrics($record);
+
+    $overallStatus = ($primaryStatus === 'Down' || 
+                    ($secondaryStatus === 'Down' && !empty($record->secondary_url)) || 
+                    ($tertiaryStatus === 'Down' && !empty($record->tertiary_url))) 
+                    ? 'Down' : 'Live';
+
+    Notification::make()
+        ->title('Website Checked')
+        ->body("{$record->name} status: {$overallStatus}")
+        ->success()
+        ->send();
+})
+->color('success')
             ])
             ->bulkActions([
                 Tables\Actions\DeleteBulkAction::make(),
@@ -279,164 +318,176 @@ class MagentoResource extends Resource
             );
     }
 
-    /**
-     * Check custom metrics and send notifications if thresholds are exceeded
-     */
-    public static function checkCustomMetrics(Magento $record): void
-    {
-        // Get system metrics
-        $systemData = self::getSystemTestData();
-        
-        // Get all custom checks for this Magento record
-        $customChecks = $record->customchecks;
-        
-        if ($customChecks->isEmpty()) {
-            return;
-        }
-        
-        foreach ($customChecks as $check) {
-            // Skip CPU load check type as it's being removed or inactive checks
-            if ($check->check_type === 'cpu_load' || !$check->is_active) {
-                continue;
-            }
-            
-            // Get type name for notifications
-            $typeName = match($check->check_type) {
-                'cpu' => 'CPU Usage',
-                'ram' => 'Memory Usage',
-                'disk' => 'Disk Space',
-                default => $check->check_type
-            };
-            
-            $suffix = match ($check->check_type) {
-                'cpu', 'ram', 'disk' => '%',
-                default => '',
-            };
-            
-            // Check if the custom metric is triggered
-            $currentValue = null;
-            $isTriggered = false;
-            
-            if ($check->check_type === 'cpu' && isset($systemData['cpu']['usage_percent'])) {
-                $currentValue = $systemData['cpu']['usage_percent'];
-                
-                // Determine if check is triggered based on comparison operator
-                if ($check->comparison_operator === 'Greater than') {
-                    $isTriggered = $currentValue > $check->threshold_value;
-                } elseif ($check->comparison_operator === 'Less than') {
-                    $isTriggered = $currentValue < $check->threshold_value;
-                } elseif ($check->comparison_operator === 'Equal to') {
-                    $isTriggered = $currentValue == $check->threshold_value;
-                }
-                
-                // Send notification if check is triggered
-                if ($isTriggered) {
-                    self::sendCustomCheckNotification($record, $check, $typeName, $currentValue, $suffix);
-                }
-            } elseif ($check->check_type === 'ram' && isset($systemData['ram']['usage_percent'])) {
-                $currentValue = $systemData['ram']['usage_percent'];
-                
-                // Determine if check is triggered
-                if ($check->comparison_operator === 'Greater than') {
-                    $isTriggered = $currentValue > $check->threshold_value;
-                } elseif ($check->comparison_operator === 'Less than') {
-                    $isTriggered = $currentValue < $check->threshold_value;
-                } elseif ($check->comparison_operator === 'Equal to') {
-                    $isTriggered = $currentValue == $check->threshold_value;
-                }
-                
-                // Send notification if check is triggered
-                if ($isTriggered) {
-                    self::sendCustomCheckNotification($record, $check, $typeName, $currentValue, $suffix);
-                }
-            } elseif ($check->check_type === 'disk' && isset($systemData['disk']['usage_percent'])) {
-                $currentValue = $systemData['disk']['usage_percent'];
-                
-                // Determine if check is triggered
-                if ($check->comparison_operator === 'Greater than') {
-                    $isTriggered = $currentValue > $check->threshold_value;
-                } elseif ($check->comparison_operator === 'Less than') {
-                    $isTriggered = $currentValue < $check->threshold_value;
-                } elseif ($check->comparison_operator === 'Equal to') {
-                    $isTriggered = $currentValue == $check->threshold_value;
-                }
-                
-                // Send notification if check is triggered
-                if ($isTriggered) {
-                    self::sendCustomCheckNotification($record, $check, $typeName, $currentValue, $suffix);
-                }
-            }
-        }
-    }
 
-    /**
-     * Send notification for custom check
-     */
-    protected static function sendCustomCheckNotification($record, $check, $typeName, $currentValue, $suffix): bool
-    {
-        $magento = $record->name;
-        $subject = "ALERT: {$check->name} check triggered for {$magento}";
-        $message = "The {$check->name} check has been triggered for {$magento}.\n\n" .
-                   "Current {$typeName}: {$currentValue}{$suffix}\n" .
-                   "Threshold: {$check->comparison_operator} {$check->threshold_value}{$suffix}\n\n" .
-                   "This alert was generated on " . now()->format('Y-m-d H:i:s');
+/**
+ * Check custom metrics and send notifications if thresholds are exceeded
+ */
+public static function checkCustomMetrics(Magento $record): void
+{
+    // Get system metrics
+    $systemData = self::getSystemTestData();
+    
+    // Get all custom checks for this Magento record
+    $customChecks = $record->customchecks;
+    
+    if ($customChecks->isEmpty()) {
+        return;
+    }
+    
+    // Use a tracking array to avoid sending duplicate notifications
+    static $notifiedChecks = [];
+    $currentRunId = uniqid();
+    
+    foreach ($customChecks as $check) {
+        // Skip CPU load check type as it's being removed or inactive checks
+        if (!$check->is_active) {
+            continue;
+        }
         
-        try {
-            // Log the notification for testing/debugging
-            Log::info('ALERT NOTIFICATION WOULD BE SENT', [
-                'subject' => $subject,
-                'message' => $message,
-                'to' => self::$notificationEmail
-            ]);
+        // Create a unique identifier for this check in this run
+        $checkIdentifier = $record->id . '-' . $check->id . '-' . $currentRunId;
+        
+        // Skip if we've already processed this check in the current execution
+        if (isset($notifiedChecks[$checkIdentifier])) {
+            continue;
+        }
+        
+        // Get type name for notifications
+        $typeName = match($check->check_type) {
+            'cpu' => 'CPU Usage',
+            'ram' => 'Memory Usage',
+            'disk' => 'Disk Space',
+            default => $check->check_type
+        };
+        
+        $suffix = match ($check->check_type) {
+            'cpu', 'ram', 'disk' => '%',
+            default => '',
+        };
+        
+        // Only process check if data exists for the specific check type
+        $currentValue = null;
+        
+        switch ($check->check_type) {
+            case 'cpu':
+                if (!isset($systemData['cpu']['usage_percent'])) {
+                    continue 2; // Skip to next check
+                }
+                $currentValue = $systemData['cpu']['usage_percent'];
+                break;
+                
+            case 'ram':
+                if (!isset($systemData['ram']['usage_percent'])) {
+                    continue 2; // Skip to next check
+                }
+                $currentValue = $systemData['ram']['usage_percent'];
+                break;
+                
+            case 'disk':
+                if (!isset($systemData['disk']['usage_percent'])) {
+                    continue 2; // Skip to next check
+                }
+                $currentValue = $systemData['disk']['usage_percent'];
+                break;
+                
+            default:
+                continue 2; // Skip to next check if unknown type
+        }
+        
+        // Determine if check is triggered based on comparison operator
+        $isTriggered = false;
+        switch ($check->comparison_operator) {
+            case 'Greater than':
+                $isTriggered = $currentValue > $check->threshold_value;
+                break;
+            case 'Less than':
+                $isTriggered = $currentValue < $check->threshold_value;
+                break;
+            case 'Equal to':
+                $isTriggered = $currentValue == $check->threshold_value;
+                break;
+        }
+        
+        // Send notification if check is triggered
+        if ($isTriggered) {
+            // Mark this check as notified to prevent duplicates
+            $notifiedChecks[$checkIdentifier] = true;
             
-            // Show UI notification
-            Notification::make()
-                ->title('Alert Triggered')
-                ->body("{$check->name} check for {$magento} has been triggered. Current value: {$currentValue}{$suffix}")
-                ->warning()
-                ->send();
+            // Call the notification method only once for this check
+            self::sendCustomCheckNotification($record, $check, $typeName, $currentValue, $suffix);
             
-            // Return true to simulate successful sending
-            return true;
-            
-            /* Uncomment for actual email sending implementation
-            $mailchimpApiKey = config('services.mailchimp.api_key');
-            $mailchimpServerPrefix = config('services.mailchimp.server_prefix');
-            $fromEmail = config('services.mailchimp.from_email', 'notifications@wedigify.nl');
-            $fromName = config('services.mailchimp.from_name', 'Wedigify Monitoring');
-    
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $mailchimpApiKey,
-                'Content-Type' => 'application/json',
-            ])->post("https://{$mailchimpServerPrefix}.api.mailchimp.com/3.0/messages/send-template", [
-                'template_name' => 'alert-notification',
-                'template_content' => [],
-                'message' => [
-                    'subject' => $subject,
-                    'from_email' => $fromEmail,
-                    'from_name' => $fromName,
-                    'to' => [
-                        [
-                            'email' => self::$notificationEmail,
-                            'type' => 'to'
-                        ]
-                    ],
-                    'global_merge_vars' => [
-                        [
-                            'name' => 'ALERT_MESSAGE',
-                            'content' => $message
-                        ]
-                    ]
-                ]
-            ]);
-    
-            return $response->successful();
-            */
-        } catch (\Exception $e) {
-            Log::error('Failed to send notification: ' . $e->getMessage());
-            return false;
+            // Log the trigger for debugging
+            Log::info("Triggered custom check: {$check->name} for domain {$record->name}");
         }
     }
+}
+
+/**
+ * Send notification for custom check
+ */
+/**
+ * Send notification for custom check with email sending disabled
+ */
+protected static function sendCustomCheckNotification($record, $check, $typeName, $currentValue, $suffix): bool
+{
+    $magento = $record->name;
+    $subject = "ALERT: {$check->name} check triggered for {$magento}";
+    $message = "The {$check->name} check has been triggered for {$magento}.\n\n" .
+               "Current {$typeName}: {$currentValue}{$suffix}\n" .
+               "Threshold: {$check->comparison_operator} {$check->threshold_value}{$suffix}\n\n" .
+               "This alert was generated on " . now()->format('Y-m-d H:i:s');
+    
+    try {
+        // Generate a unique key for this notification to prevent duplicates
+        $notificationKey = md5($record->id . $check->id . $currentValue . date('Y-m-d-H'));
+        $cacheKey = "notification_sent:{$notificationKey}";
+        
+        // Check if we've recently sent this exact notification
+        if (cache()->has($cacheKey)) {
+            Log::info('Duplicate notification prevented', [
+                'check' => $check->name,
+                'domain' => $magento
+            ]);
+            return true;
+        }
+        
+        // Add to cache to prevent duplicate notifications for a period of time
+        cache()->put($cacheKey, true, now()->addHour()); // Cache for 1 hour
+        
+        // Log the notification instead of sending email
+        Log::info('ALERT NOTIFICATION (EMAIL DISABLED)', [
+            'subject' => $subject,
+            'message' => $message,
+            'to' => self::$notificationEmail,
+            'check_name' => $check->name,
+            'domain' => $magento,
+            'current_value' => $currentValue . $suffix,
+            'threshold' => $check->comparison_operator . ' ' . $check->threshold_value . $suffix,
+            'timestamp' => now()->format('Y-m-d H:i:s')
+        ]);
+        
+        // Show UI notification (this will still work)
+        Notification::make()
+            ->title('Alert Triggered')
+            ->body("{$check->name} check for {$magento} has been triggered. Current value: {$currentValue}{$suffix}")
+            ->warning()
+            ->send();
+        
+        // NOTE: Email sending is completely disabled
+        // Uncomment this section when Mailtrap limit is resolved or alternative is set up
+        /*
+        Mail::raw($message, function($message) use ($subject, $magento) {
+            $message->to(self::$notificationEmail)
+                ->subject($subject);
+        });
+        */
+        
+        return true;
+    } catch (\Exception $e) {
+        Log::error('Failed to process notification: ' . $e->getMessage());
+        return false;
+    }
+}
  
     public static function checkWebsiteStatus(string $url, string $urlType = 'primary'): array
     {
