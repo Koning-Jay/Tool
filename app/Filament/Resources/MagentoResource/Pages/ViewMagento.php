@@ -256,43 +256,58 @@ class ViewMagento extends ViewRecord
                             ->label('API Key')
                             ->visible(fn ($record) => filled($record->api_key)),
                         
-                        Section::make('Current System Usage')
+                            Section::make('Current System Usage')
                             ->schema([
                                 TextEntry::make('ram_usage')
                                     ->label('RAM Usage')
                                     ->state(function () {
                                         $data = MagentoResource::getSystemTestData();
-    
-                                        if (!isset($data['ram']) || !isset($data['ram']['usage_percent'])) {
+                        
+                                        if (!isset($data['ram'])) {
                                             return 'No RAM Data';
                                         }
-    
-                                        return $data['ram']['usage_percent'] . '% (' . $data['ram']['used_mb'] . ' MB used of ' . $data['ram']['total_mb'] . ' MB)';
+                                        
+                                        // Calculate RAM usage percentage
+                                        $used = $data['ram']['used_gb'] ?? 0;
+                                        $total = $data['ram']['total_gb'] ?? 1; // Avoid division by zero
+                                        $usagePercent = round(($used / $total) * 100, 2);
+                        
+                                        return $usagePercent . '% (' . $used . ' MB used of ' . $total . ' MB)';
                                     }),
-    
+                        
                                 TextEntry::make('disk_usage')
                                     ->label('Disk Usage')
                                     ->state(function () {
                                         $data = MagentoResource::getSystemTestData();
-    
-                                        if (!isset($data['disk']) || !isset($data['disk']['usage_percent'])) {
+                        
+                                        if (!isset($data['disk'])) {
                                             return 'No Disk Data';
                                         }
-    
-                                        return $data['disk']['usage_percent'] . '% (' . $data['disk']['used_gb'] . ' GB used of ' . $data['disk']['total_gb'] . ' GB)';
+                                        
+                                        // Calculate Disk usage percentage
+                                        $used = $data['disk']['used_gb'] ?? 0;
+                                        $total = $data['disk']['total_gb'] ?? 1; // Avoid division by zero
+                                        $usagePercent = round(($used / $total) * 100, 2);
+                        
+                                        return $usagePercent . '% (' . $used . ' GB used of ' . $total . ' GB)';
                                     }),
                                     
                                 TextEntry::make('cpu_usage')
                                     ->label('CPU Usage')
                                     ->state(function () {
                                         $data = MagentoResource::getSystemTestData();
-    
-                                        if (!isset($data['cpu']) || !isset($data['cpu']['usage_percent'])) {
+                        
+                                        if (!isset($data['cpu'])) {
                                             return 'No CPU Data';
                                         }
-    
-                                        return $data['cpu']['usage_percent'] . '% (' . $data['cpu']['used_gb'] . ' GB used of ' . $data['disk']['total_gb'] . ' GB)';
-                                    }),
+                                        
+                                        // Calculate CPU usage percentage using the same method as in the command
+                                        $used = $data['cpu']['used_gb'] ?? 0;
+                                        $total = $data['cpu']['total_gb'] ?? 1; // Avoid division by zero
+                                        $usagePercent = round(($used / $total) * 100, 2);
+                        
+                                        return $usagePercent . '% (' . $used . ' GB used of ' . $total . ' GB)';
+                                    })
                             ]),
                             
                         TextEntry::make('created_at')
@@ -542,7 +557,7 @@ class ViewMagento extends ViewRecord
                                                         // Type name
                                                         $typeName = match($check->check_type) {
                                                             'cpu' => 'CPU Usage',
-                                                            'ram' => 'Memory Usage',
+                                                            'ram' => 'Ram Usage',
                                                             'disk' => 'Disk Space',
                                                             default => $check->check_type
                                                         };
@@ -560,28 +575,30 @@ class ViewMagento extends ViewRecord
                                                         $currentValue = null;
                                                         $isTriggered = false;
                                                         
-                                                        if ($check->check_type === 'cpu' && isset($systemData['cpu']['usage_percent'])) {
-                                                            $currentValue = $systemData['cpu']['usage_percent'];
-                                                            // Determine if check is triggered based on comparison operator
-                                                            if ($check->comparison_operator === 'Greater than') {
-                                                                $isTriggered = $currentValue > $check->threshold_value;
-                                                            } elseif ($check->comparison_operator === 'Less than') {
-                                                                $isTriggered = $currentValue < $check->threshold_value;
-                                                            } elseif ($check->comparison_operator === 'Equal to') {
-                                                                $isTriggered = $currentValue == $check->threshold_value;
-                                                            }
-                                                            // Send email notification if check is triggered and active
+                                                        if (in_array($check->check_type, ['cpu', 'ram', 'disk'])) {
+                                                            $used = $systemData[$check->check_type]['used_gb'] ?? 0;
+                                                            $total = $systemData[$check->check_type]['total_gb'] ?? 1;
+                                                            $usagePercent = round(($used / $total) * 100, 2);
+                                                        
+                                                            $currentValue = $usagePercent;
+                                                        
+                                                            $isTriggered = match ($check->comparison_operator) {
+                                                                'Greater than' => $currentValue > $check->threshold_value,
+                                                                'Less than' => $currentValue < $check->threshold_value,
+                                                                'Equal to' => $currentValue == $check->threshold_value,
+                                                                default => false,
+                                                            };
+                                                        
                                                             if ($isTriggered && $check->is_active) {
                                                                 $magento = $record->name;
                                                                 $subject = "ALERT: {$check->name} check triggered for {$magento}";
                                                                 $message = "The {$check->name} check has been triggered for {$magento}.\n\n" .
-                                                                           "Current {$typeName}: {$currentValue}{$suffix}\n" .
+                                                                           "Current {$typeName}: {$currentValue}{$suffix} ({$used} GB of {$total} GB)\n" .
                                                                            "Threshold: {$check->comparison_operator} {$check->threshold_value}{$suffix}\n\n" .
                                                                            "This alert was generated on " . now()->format('Y-m-d H:i:s');
-                                                                            
+                                                        
                                                                 $notificationSent = $this->sendMailchimpNotification($subject, $message);
-                                                                
-                                                                // Show a visible UI notification for testing
+                                                        
                                                                 if ($notificationSent) {
                                                                     Notification::make()
                                                                         ->title('Alert Email Sent')
@@ -590,67 +607,12 @@ class ViewMagento extends ViewRecord
                                                                         ->send();
                                                                 }
                                                             }
-                                                        } elseif ($check->check_type === 'ram' && isset($systemData['ram']['usage_percent'])) {
-                                                            $currentValue = $systemData['ram']['usage_percent'];
-                                                            // Determine if check is triggered
-                                                            if ($check->comparison_operator === 'Greater than') {
-                                                                $isTriggered = $currentValue > $check->threshold_value;
-                                                            } elseif ($check->comparison_operator === 'Less than') {
-                                                                $isTriggered = $currentValue < $check->threshold_value;
-                                                            } elseif ($check->comparison_operator === 'Equal to') {
-                                                                $isTriggered = $currentValue == $check->threshold_value;
-                                                            }
-                                                            // Send email notification if check is triggered and active
-                                                            if ($isTriggered && $check->is_active) {
-                                                                $magento = $record->name;
-                                                                $subject = "ALERT: {$check->name} check triggered for {$magento}";
-                                                                $message = "The {$check->name} check has been triggered for {$magento}.\n\n" .
-                                                                           "Current {$typeName}: {$currentValue}{$suffix}\n" .
-                                                                           "Threshold: {$check->comparison_operator} {$check->threshold_value}{$suffix}\n\n" .
-                                                                           "This alert was generated on " . now()->format('Y-m-d H:i:s');
-                                                                            
-                                                                $notificationSent = $this->sendMailchimpNotification($subject, $message);
-                                                                
-                                                                // Show a visible UI notification for testing
-                                                                if ($notificationSent) {
-                                                                    Notification::make()
-                                                                        ->title('Alert Email Sent')
-                                                                        ->body("An alert email for {$check->name} would be sent to {$this->notificationEmail}")
-                                                                        ->warning()
-                                                                        ->persistent()
-                                                                        ->send();
-                                                                }
-                                                            }
-                                                        } elseif ($check->check_type === 'disk' && isset($systemData['disk']['usage_percent'])) {
-                                                            $currentValue = $systemData['disk']['usage_percent'];
-                                                            // Determine if check is triggered
-                                                            if ($check->comparison_operator === 'Greater than') {
-                                                                $isTriggered = $currentValue > $check->threshold_value;
-                                                            } elseif ($check->comparison_operator === 'Less than') {
-                                                                $isTriggered = $currentValue < $check->threshold_value;
-                                                            } elseif ($check->comparison_operator === 'Equal to') {
-                                                                $isTriggered = $currentValue == $check->threshold_value;
-                                                            }
-                                                            // Send email notification if check is triggered and active
-                                                            if ($isTriggered && $check->is_active) {
-                                                                $magento = $record->name;
-                                                                $subject = "ALERT: {$check->name} check triggered for {$magento}";
-                                                                $message = "The {$check->name} check has been triggered for {$magento}.\n\n" .
-                                                                           "Current {$typeName}: {$currentValue}{$suffix}\n" .
-                                                                           "Threshold: {$check->comparison_operator} {$check->threshold_value}{$suffix}\n\n" .
-                                                                           "This alert was generated on " . now()->format('Y-m-d H:i:s');
-                                                                            
-                                                                $notificationSent = $this->sendMailchimpNotification($subject, $message);
-                                                                
-                                                                // Show a visible UI notification for testing
-                                                                if ($notificationSent) {
-                                                                    Notification::make()
-                                                                        ->title('Alert Email Sent')
-                                                                        ->body("An alert email for {$check->name} would be sent to {$this->notificationEmail}")
-                                                                        ->send();
-                                                                }
-                                                            }
+                                                        
+                                                            $valueHtml = "<strong>{$currentValue}{$suffix}</strong><br><small>{$used} GB of {$total} GB</small>";
+                                                        } else {
+                                                            $valueHtml = "<strong>N/A</strong>";
                                                         }
+                                                        
                                                         
                                                         $html .= '<div class="border rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow duration-200 ' . ($isTriggered ? 'border-red-300 bg-red-50' : '') . '">';
                                                         

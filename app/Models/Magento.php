@@ -55,4 +55,5 @@ class Magento extends Model
     {
         return $this->belongsToMany(Customchecks::class, 'customcheck_magento');
     }
+    
 }
