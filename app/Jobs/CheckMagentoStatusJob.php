@@ -18,7 +18,7 @@ class CheckMagentoStatusJob implements ShouldQueue
 
     protected $magentoId;
     public $timeout = 300; // 5 minutes
-    public $tries = 1;     // Don't retry by default
+    public $tries = 3;     // Don't retry by default
 
     /**
      * Create a new job instance.

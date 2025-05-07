@@ -12,14 +12,12 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
-        // Collect system metrics every 5 minutes
         $schedule->command('system:collect-metrics')
-                ->everyFiveMinutes()
-                ->appendOutputTo(storage_path('logs/metrics.log'));
+        ->everyMinute()
+        ->appendOutputTo(storage_path('logs/metrics.log'));
                 
-        // Check website status every 10 minutes
         $schedule->command('magento:check-status')
-                ->everyTenMinutes()
+                ->everyMinute()
                 ->appendOutputTo(storage_path('logs/website-checks.log'));
     }
 

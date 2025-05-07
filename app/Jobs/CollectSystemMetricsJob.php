@@ -15,8 +15,8 @@ class CollectSystemMetricsJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, QueueProgress;
     
-    public $timeout = 120; // 2 minutes
-    public $tries = 1;     // Don't retry by default
+    public $timeout = 300; // 2 minutes
+    public $tries = 3;     // Don't retry by default
 
     /**
      * Create a new job instance.
