@@ -9,22 +9,27 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
+use Croustibat\FilamentJobsMonitor\Traits\QueueProgress;
 
-class CollectSystemMetricsJob implements ShouldQueue
+
+class CheckMagentoStatusJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, QueueProgress;
 
-    public $timeout = 120; // 2 minutes
+    protected $magentoId;
+    public $timeout = 300; // 5 minutes
     public $tries = 1;     // Don't retry by default
 
     /**
      * Create a new job instance.
      *
+     * @param int|null $magentoId
      * @return void
      */
-    public function __construct()
+    public function __construct($magentoId = null)
     {
-        $this->onQueue('system-metrics');
+        $this->magentoId = $magentoId;
+        $this->onQueue('website-checks');
     }
 
     /**
@@ -34,26 +39,30 @@ class CollectSystemMetricsJob implements ShouldQueue
      */
     public function handle()
     {
-        Log::info('Starting system metrics collection job');
-        
+        Log::info('Starting Magento status check job', ['magento_id' => $this->magentoId]);
+
         try {
-            $output = Artisan::call('system:collect-metrics');
-            
+            if ($this->magentoId) {
+                $output = Artisan::call('magento:check-status', ['id' => $this->magentoId]);
+            } else {
+                $output = Artisan::call('magento:check-status');
+            }
+
             // Get the output of the command
             $outputText = Artisan::output();
-            Log::info('System metrics collection completed', [
+            Log::info('Magento status check completed', [
                 'exit_code' => $output,
                 'output' => $outputText
             ]);
-            
+
             // Append to log file
             file_put_contents(
-                storage_path('logs/metrics.log'), 
+                storage_path('logs/website-checks.log'), 
                 '[' . date('Y-m-d H:i:s') . '] ' . $outputText . PHP_EOL, 
                 FILE_APPEND
             );
         } catch (\Exception $e) {
-            Log::error('System metrics collection failed', [
+            Log::error('Magento status check failed', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);

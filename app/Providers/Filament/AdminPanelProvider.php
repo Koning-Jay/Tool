@@ -34,10 +34,12 @@ class AdminPanelProvider extends PanelProvider
             ->colors([
                 'primary' => Color::Amber,
             ])
-->plugins([
-    FilamentJobsMonitorPlugin::make()
-        ->enableNavigation(), // Optional: enables navigation in the admin panel
+    ->resources([
+    // Your other resources...
+    \Croustibat\FilamentJobsMonitor\Resources\QueueMonitorResource::class,
 ])
+// Or using the plugin:
+->plugin(new \Croustibat\FilamentJobsMonitor\FilamentJobsMonitorPlugin())
 ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')
             ->pages([
