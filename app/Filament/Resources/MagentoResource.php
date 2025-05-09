@@ -531,20 +531,94 @@ class MagentoResource extends Resource
         }
     }
 
-    public static function getSystemTestData(): array
+    /**
+ * Updated getSystemTestData method for MagentoResource class to fetch
+ * real-time system data from the health check endpoint
+ */
+public static function getSystemTestData(): array
     {
-        $path = storage_path('app/system_testdata.json');
-
-        if (!file_exists($path)) {
+        try {
+            // Initialize cURL session to fetch data from the health check endpoint
+            $ch = curl_init();
+            $url = 'https://wedigify.hypernode.io/health_check.php';
+            $username = 'dev';
+            $password = 'dev';
+            
+            // Set cURL options
+            curl_setopt_array($ch, [
+                CURLOPT_URL => $url,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_USERPWD => "$username:$password",
+                CURLOPT_HTTPAUTH => CURLAUTH_BASIC,
+                CURLOPT_SSL_VERIFYPEER => false, // Only disable this in dev environments
+            ]);
+            
+            // Execute the request
+            $response = curl_exec($ch);
+            
+            // Check for errors
+            if (curl_errno($ch)) {
+                Log::error('cURL error in getSystemTestData: ' . curl_error($ch));
+                return self::getDefaultSystemData();
+            }
+            
+            // Close the cURL session
+            curl_close($ch);
+            
+            // Parse JSON response
+            $data = json_decode($response, true);
+            
+            // Verify data structure
+            if (!is_array($data) || empty($data)) {
+                Log::error('Invalid data received from health check API', ['response' => $response]);
+                return self::getDefaultSystemData();
+            }
+            
+            // Format the data according to the expected structure in the view
             return [
-                'ram' => null,
-                'disk' => null,
-                'cpu' => null,
+                'ram' => [
+                    'used_gb' => round($data['memory']['value'], 2),
+                    'total_gb' => 100, // Memory usage is already in percentage
+                ],
+                'cpu' => [
+                    'used_gb' => (float)$data['cpu']['value'],
+                    'total_gb' => 100, // CPU usage is already in percentage
+                ],
+                'disk' => [
+                    'used_gb' => round($data['disk_used']['value'] / (1024 * 1024 * 1024), 2), // Convert to GB
+                    'total_gb' => round($data['disk_total']['value'] / (1024 * 1024 * 1024), 2), // Convert to GB
+                ],
             ];
+        } catch (\Exception $e) {
+            Log::error('Exception in getSystemTestData: ' . $e->getMessage());
+            return self::getDefaultSystemData();
         }
-
-        return json_decode(file_get_contents($path), true);
     }
+
+    /**
+     * Get default system data when API call fails
+     * 
+     * @return array
+     */
+    private static function getDefaultSystemData(): array
+    {
+        return [
+            'ram' => [
+                'used_gb' => 0,
+                'total_gb' => 1,
+            ],
+            'cpu' => [
+                'used_gb' => 0,
+                'total_gb' => 1,
+            ],
+            'disk' => [
+                'used_gb' => 0,
+                'total_gb' => 1,
+            ],
+        ];
+    } 
+    
+
 
     public static function getRelations(): array
     {
