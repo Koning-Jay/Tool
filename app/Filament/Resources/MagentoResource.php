@@ -17,6 +17,7 @@ use Filament\Forms\Components\Hidden;
 use Illuminate\Validation\Rule;
 use Filament\Notifications\Notification;
 use App\Notifications\WebsiteDownNotification;
+use App\Notifications\CustomCheckNotification;
 use Filament\Forms\Components\Card;
 use Illuminate\Support\Facades\Notification as FacadesNotification;
 use Illuminate\Support\Facades\Log;
@@ -220,22 +221,19 @@ class MagentoResource extends Resource
                     ]);
 
                     if ($primaryStatus === 'Down' && !empty($record->notification_emails)) {
-                        // Log instead of sending emails
-                        Log::warning('WEBSITE DOWN ALERT (EMAIL DISABLED)', [
+                        // Log and send emails
+                        Log::warning('WEBSITE DOWN ALERT', [
                             'website' => $record->name,
                             'url' => $record->url,
                             'url_type' => 'primary',
-                            'recipients_would_be' => $record->notification_emails,
+                            'recipients' => $record->notification_emails,
                             'timestamp' => now()->format('Y-m-d H:i:s')
                         ]);
                         
-                        // Uncomment when Mailtrap issue is resolved
-                        /*
                         foreach ($record->notification_emails as $email) {
                             FacadesNotification::route('mail', trim($email))
                                 ->notify(new WebsiteDownNotification($record, 'primary'));
                         }
-                        */
                     }
 
                     $secondaryStatus = null;
@@ -255,22 +253,19 @@ class MagentoResource extends Resource
                         ]);
 
                         if ($secondaryStatus === 'Down' && !empty($record->notification_emails)) {
-                            // Log instead of sending emails
-                            Log::warning('WEBSITE DOWN ALERT (EMAIL DISABLED)', [
+                            // Log and send emails
+                            Log::warning('WEBSITE DOWN ALERT', [
                                 'website' => $record->name,
                                 'url' => $record->secondary_url,
                                 'url_type' => 'secondary',
-                                'recipients_would_be' => $record->notification_emails,
+                                'recipients' => $record->notification_emails,
                                 'timestamp' => now()->format('Y-m-d H:i:s')
                             ]);
-                            
-                            // Uncomment when Mailtrap issue is resolved
                             
                             foreach ($record->notification_emails as $email) {
                                 FacadesNotification::route('mail', trim($email))
                                     ->notify(new WebsiteDownNotification($record, 'secondary'));
                             }
-                            
                         }
                     }
 
@@ -291,22 +286,19 @@ class MagentoResource extends Resource
                         ]);
 
                         if ($tertiaryStatus === 'Down' && !empty($record->notification_emails)) {
-                            // Log instead of sending emails
-                            Log::warning('WEBSITE DOWN ALERT (EMAIL DISABLED)', [
+                            // Log and send emails
+                            Log::warning('WEBSITE DOWN ALERT', [
                                 'website' => $record->name,
                                 'url' => $record->tertiary_url,
                                 'url_type' => 'tertiary',
-                                'recipients_would_be' => $record->notification_emails,
+                                'recipients' => $record->notification_emails,
                                 'timestamp' => now()->format('Y-m-d H:i:s')
                             ]);
-                            
-                            // Uncomment when Mailtrap issue is resolved
                             
                             foreach ($record->notification_emails as $email) {
                                 FacadesNotification::route('mail', trim($email))
                                     ->notify(new WebsiteDownNotification($record, 'tertiary'));
                             }
-                        
                         }
                     }
 
@@ -335,121 +327,148 @@ class MagentoResource extends Resource
     }
 
 
+    /**
+     * Check custom metrics and send notifications if thresholds are exceeded
+     */
+
+
+/**
+ * Check custom metrics and send notifications if thresholds are exceeded
+ */
+public static function checkCustomMetrics(Magento $record): void
+{
+    // Get system metrics
+    $systemData = self::getSystemTestData();
     
-    public static function checkCustomMetrics(Magento $record): void
-    {
-        // Get system metrics
-        $systemData = self::getSystemTestData();
-        
-        // Get all custom checks for this Magento record
-        $customChecks = $record->customchecks;
-        
-        if ($customChecks->isEmpty()) {
-            return;
+    // Debug log to see what data we're working with
+    Log::info('System data retrieved for custom metrics check', [
+        'domain' => $record->name,
+        'system_data' => $systemData
+    ]);
+    
+    // Get all custom checks for this Magento record
+    $customChecks = $record->customchecks;
+    
+    if ($customChecks->isEmpty()) {
+        return;
+    }
+    
+    foreach ($customChecks as $check) {
+        // Skip inactive checks
+        if (!$check->is_active) {
+            continue;
         }
         
-        // Use a tracking array to avoid sending duplicate notifications
-        static $notifiedChecks = [];
-        $currentRunId = uniqid();
+        // Get type name for notifications
+        $typeName = match($check->check_type) {
+            'cpu' => 'CPU Usage',
+            'ram' => 'Memory Usage',
+            'disk' => 'Disk Space',
+            default => $check->check_type
+        };
         
-        foreach ($customChecks as $check) {
-            // Skip inactive checks
-            if (!$check->is_active) {
-                continue;
-            }
-            
-            // Create a unique identifier for this check in this run
-            $checkIdentifier = $record->id . '-' . $check->id . '-' . $currentRunId;
-            
-            // Skip if we've already processed this check in the current execution
-            if (isset($notifiedChecks[$checkIdentifier])) {
-                continue;
-            }
-            
-            // Get type name for notifications
-            $typeName = match($check->check_type) {
-                'cpu' => 'CPU Usage',
-                'ram' => 'Memory Usage',
-                'disk' => 'Disk Space',
-                default => $check->check_type
-            };
-            
-            $suffix = match ($check->check_type) {
-                'cpu', 'ram', 'disk' => '%',
-                default => '',
-            };
-            
-            // Only process check if data exists for the specific check type
-            $currentValue = null;
-            
-            switch ($check->check_type) {
-                case 'cpu':
-                    if (!isset($systemData['cpu'])) {
-                        continue 2; // Skip to next check
-                    }
-                    // Calculate CPU usage percentage
-                    $used = $systemData['cpu']['used_gb'] ?? 0;
-                    $total = $systemData['cpu']['total_gb'] ?? 1; // Avoid division by zero
-                    $currentValue = round(($used / $total) * 100, 2);
-                    break;
-                    
-                case 'ram':
-                    if (!isset($systemData['ram'])) {
-                        continue 2; // Skip to next check
-                    }
-                    // Calculate RAM usage percentage
-                    $used = $systemData['ram']['used_gb'] ?? 0;
-                    $total = $systemData['ram']['total_gb'] ?? 1; // Avoid division by zero
-                    $currentValue = round(($used / $total) * 100, 2);
-                    break;
-                    
-                case 'disk':
-                    if (!isset($systemData['disk'])) {
-                        continue 2; // Skip to next check
-                    }
-                    // Calculate disk usage percentage
-                    $used = $systemData['disk']['used_gb'] ?? 0;
-                    $total = $systemData['disk']['total_gb'] ?? 1; // Avoid division by zero
-                    $currentValue = round(($used / $total) * 100, 2);
-                    break;
-                    
-                default:
-                    continue 2; // Skip to next check if unknown type
-            }
-            
-            // Determine if check is triggered based on comparison operator
-            $isTriggered = false;
-            switch ($check->comparison_operator) {
-                case 'Greater than':
-                    $isTriggered = $currentValue > $check->threshold_value;
-                    break;
-                case 'Less than':
-                    $isTriggered = $currentValue < $check->threshold_value;
-                    break;
-                case 'Equal to':
-                    $isTriggered = $currentValue == $check->threshold_value;
-                    break;
-            }
-            
-            // Send notification if check is triggered
-            if ($isTriggered) {
-                // Mark this check as notified to prevent duplicates
-                $notifiedChecks[$checkIdentifier] = true;
+        $suffix = match ($check->check_type) {
+            'cpu', 'ram', 'disk' => '%',
+            default => '',
+        };
+        
+        // Only process check if data exists for the specific check type
+        $currentValue = null;
+        
+        switch ($check->check_type) {
+            case 'cpu':
+                if (!isset($systemData['cpu'])) {
+                    Log::warning('CPU data missing for custom check', [
+                        'check_name' => $check->name,
+                        'domain' => $record->name
+                    ]);
+                    continue 2; // Skip to next check
+                }
+                // Calculate CPU usage percentage
+                $used = $systemData['cpu']['used_gb'] ?? 0;
+                $total = $systemData['cpu']['total_gb'] ?? 1; // Avoid division by zero
+                $currentValue = round(($used / $total) * 100, 2);
+                break;
                 
-                // Call the notification method only once for this check
-                self::sendCustomCheckNotification($record, $check, $typeName, $currentValue, $suffix);
+            case 'ram':
+                if (!isset($systemData['ram'])) {
+                    Log::warning('RAM data missing for custom check', [
+                        'check_name' => $check->name,
+                        'domain' => $record->name
+                    ]);
+                    continue 2; // Skip to next check
+                }
+                // Calculate RAM usage percentage
+                $used = $systemData['ram']['used_gb'] ?? 0;
+                $total = $systemData['ram']['total_gb'] ?? 1; // Avoid division by zero
+                $currentValue = round(($used / $total) * 100, 2);
+                break;
                 
-                // Log the trigger for debugging
-                Log::info("Triggered custom check: {$check->name} for domain {$record->name}");
-            }
+            case 'disk':
+                if (!isset($systemData['disk'])) {
+                    Log::warning('Disk data missing for custom check', [
+                        'check_name' => $check->name,
+                        'domain' => $record->name
+                    ]);
+                    continue 2; // Skip to next check
+                }
+                // Calculate disk usage percentage
+                $used = $systemData['disk']['used_gb'] ?? 0;
+                $total = $systemData['disk']['total_gb'] ?? 1; // Avoid division by zero
+                $currentValue = round(($used / $total) * 100, 2);
+                break;
+                
+            default:
+                Log::warning('Unknown check type', [
+                    'check_type' => $check->check_type,
+                    'check_name' => $check->name,
+                    'domain' => $record->name
+                ]);
+                continue 2; // Skip to next check if unknown type
+        }
+        
+        // Log the current value for debugging
+        Log::info('Evaluating custom check', [
+            'domain' => $record->name,
+            'check_name' => $check->name,
+            'check_type' => $check->check_type,
+            'current_value' => $currentValue,
+            'threshold' => $check->threshold_value,
+            'operator' => $check->comparison_operator
+        ]);
+        
+        // Determine if check is triggered based on comparison operator
+        $isTriggered = false;
+        switch ($check->comparison_operator) {
+            case 'Greater than':
+                $isTriggered = $currentValue > $check->threshold_value;
+                break;
+            case 'Less than':
+                $isTriggered = $currentValue < $check->threshold_value;
+                break;
+            case 'Equal to':
+                $isTriggered = $currentValue == $check->threshold_value;
+                break;
+        }
+        
+        // Send notification if check is triggered
+        if ($isTriggered) {
+            Log::info('Check triggered!', [
+                'domain' => $record->name,
+                'check_name' => $check->name,
+                'current_value' => $currentValue,
+                'threshold' => $check->threshold_value,
+                'operator' => $check->comparison_operator
+            ]);
+            
+            // Call the notification method
+            self::sendCustomCheckNotification($record, $check, $typeName, $currentValue, $suffix);
         }
     }
+}
 
-    /**
-     * Send notification for custom check with email sending disabled
-     */
-    /**
- * Very simple implementation of notification throttling with a 1-minute delay
+/**
+ * Send notification for custom check with improved reliability
  */
 protected static function sendCustomCheckNotification($record, $check, $typeName, $currentValue, $suffix): bool
 {
@@ -478,11 +497,11 @@ protected static function sendCustomCheckNotification($record, $check, $typeName
         // Set cooldown cache - this will prevent additional notifications for the next minute
         cache()->put($cacheKey, true, now()->addMinute());
         
-        // Log the notification instead of sending email
-        Log::info('ALERT NOTIFICATION (EMAIL DISABLED)', [
+        // Log the notification (keeping this for audit purposes)
+        Log::info('ALERT NOTIFICATION SENT', [
             'subject' => $subject,
             'message' => $message,
-            'to' => self::$notificationEmail,
+            'recipients' => $record->notification_emails,
             'check_name' => $check->name,
             'domain' => $magento,
             'current_value' => $currentValue . $suffix,
@@ -497,12 +516,66 @@ protected static function sendCustomCheckNotification($record, $check, $typeName
             ->warning()
             ->send();
         
+        // Make sure we have notification emails
+        $emails = $record->notification_emails;
+        if (empty($emails) || !is_array($emails)) {
+            Log::warning('No notification emails configured for domain', [
+                'domain' => $magento
+            ]);
+            return true;
+        }
+        
+        // Send email notifications to all configured email addresses
+        foreach ($emails as $email) {
+            if (empty($email) || !filter_var(trim($email), FILTER_VALIDATE_EMAIL)) {
+                Log::warning('Invalid email address skipped', [
+                    'email' => $email,
+                    'domain' => $magento
+                ]);
+                continue;
+            }
+            
+            // Create notification data
+            $notificationData = [
+                'check_name' => $check->name,
+                'domain_name' => $magento,
+                'check_type' => $typeName,
+                'current_value' => $currentValue . $suffix,
+                'threshold' => $check->comparison_operator . ' ' . $check->threshold_value . $suffix,
+                'timestamp' => now()->format('Y-m-d H:i:s')
+            ];
+            
+            try {
+                // Send mail notification
+                FacadesNotification::route('mail', trim($email))
+                    ->notify(new CustomCheckNotification($notificationData));
+                
+                Log::info('Email notification sent', [
+                    'email' => $email,
+                    'domain' => $magento,
+                    'check' => $check->name
+                ]);
+            } catch (\Exception $e) {
+                Log::error('Failed to send email notification', [
+                    'email' => $email,
+                    'error' => $e->getMessage(),
+                    'domain' => $magento,
+                    'check' => $check->name
+                ]);
+            }
+        }
+        
         return true;
     } catch (\Exception $e) {
-        Log::error('Failed to process notification: ' . $e->getMessage());
+        Log::error('Failed to process notification: ' . $e->getMessage(), [
+            'exception' => get_class($e),
+            'trace' => $e->getTraceAsString(),
+            'domain' => $magento,
+            'check' => $check->name
+        ]);
         return false;
     }
-}
+} 
  
     public static function checkWebsiteStatus(string $url, string $urlType = 'primary'): array
     {
@@ -525,10 +598,10 @@ protected static function sendCustomCheckNotification($record, $check, $typeName
     }
 
     /**
- * Updated getSystemTestData method for MagentoResource class to fetch
- * real-time system data from the health check endpoint
- */
-public static function getSystemTestData(): array
+     * Updated getSystemTestData method for MagentoResource class to fetch
+     * real-time system data from the health check endpoint
+     */
+    public static function getSystemTestData(): array
     {
         try {
             // Initialize cURL session to fetch data from the health check endpoint
