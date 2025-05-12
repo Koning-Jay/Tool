@@ -654,7 +654,7 @@ class ViewMagento extends ViewRecord
                                                             $html .= '<div class="flex flex-col space-y-1 mt-2">';
                                                             $html .= '<span class="text-sm text-gray-500">Status</span>';
                                                             $html .= $isTriggered 
-                                                                ? '<span class="px-3 py-1 text-sm font-medium rounded-full bg-red-100 text-red-800">Triggered</span>'
+                                                                ? '<span class="px-3 py-1 text-sm font-medium rounded-full bg-red-100 text-red-800">Danger</span>'
                                                                 : '<span class="px-3 py-1 text-sm font-medium rounded-full bg-green-100 text-green-800">Normal</span>';
                                                             $html .= '</div>';
                                                         } else {

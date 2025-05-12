@@ -335,9 +335,7 @@ class MagentoResource extends Resource
     }
 
 
-    /**
-     * Check custom metrics and send notifications if thresholds are exceeded
-     */
+    
     public static function checkCustomMetrics(Magento $record): void
     {
         // Get system metrics
@@ -450,66 +448,61 @@ class MagentoResource extends Resource
     /**
      * Send notification for custom check with email sending disabled
      */
-    protected static function sendCustomCheckNotification($record, $check, $typeName, $currentValue, $suffix): bool
-    {
-        $magento = $record->name;
-        $subject = "ALERT: {$check->name} check triggered for {$magento}";
-        $message = "The {$check->name} check has been triggered for {$magento}.\n\n" .
-                "Current {$typeName}: {$currentValue}{$suffix}\n" .
-                "Threshold: {$check->comparison_operator} {$check->threshold_value}{$suffix}\n\n" .
-                "This alert was generated on " . now()->format('Y-m-d H:i:s');
+    /**
+ * Very simple implementation of notification throttling with a 1-minute delay
+ */
+protected static function sendCustomCheckNotification($record, $check, $typeName, $currentValue, $suffix): bool
+{
+    $magento = $record->name;
+    $subject = "ALERT: {$check->name} check triggered for {$magento}";
+    $message = "The {$check->name} check has been triggered for {$magento}.\n\n" .
+            "Current {$typeName}: {$currentValue}{$suffix}\n" .
+            "Threshold: {$check->comparison_operator} {$check->threshold_value}{$suffix}\n\n" .
+            "This alert was generated on " . now()->format('Y-m-d H:i:s');
+    
+    try {
+        // Simple cache key for this specific check+domain combination
+        $cacheKey = "notification_cooldown:{$record->id}:{$check->id}";
         
-        try {
-            // Generate a unique key for this notification to prevent duplicates
-            $notificationKey = md5($record->id . $check->id . $currentValue . date('Y-m-d-H'));
-            $cacheKey = "notification_sent:{$notificationKey}";
-            
-            // Check if we've recently sent this exact notification
-            if (cache()->has($cacheKey)) {
-                Log::info('Duplicate notification prevented', [
-                    'check' => $check->name,
-                    'domain' => $magento
-                ]);
-                return true;
-            }
-            
-            // Add to cache to prevent duplicate notifications for a period of time
-            cache()->put($cacheKey, true, now()->addHour()); // Cache for 1 hour
-            
-            // Log the notification instead of sending email
-            Log::info('ALERT NOTIFICATION (EMAIL DISABLED)', [
-                'subject' => $subject,
-                'message' => $message,
-                'to' => self::$notificationEmail,
-                'check_name' => $check->name,
-                'domain' => $magento,
-                'current_value' => $currentValue . $suffix,
-                'threshold' => $check->comparison_operator . ' ' . $check->threshold_value . $suffix,
-                'timestamp' => now()->format('Y-m-d H:i:s')
+        // If we find the key in cache, that means the cooldown period is active
+        if (cache()->has($cacheKey)) {
+            // Log skipped notification
+            Log::info('Notification skipped: still in cooldown period', [
+                'check' => $check->name,
+                'domain' => $magento
             ]);
             
-            // Show UI notification (this will still work)
-            Notification::make()
-                ->title('Alert Triggered')
-                ->body("{$check->name} check for {$magento} has been triggered. Current value: {$currentValue}{$suffix}")
-                ->warning()
-                ->send();
-            
-            // NOTE: Email sending is completely disabled
-            // Uncomment this section when Mailtrap limit is resolved or alternative is set up
-            /*
-            Mail::raw($message, function($message) use ($subject, $magento) {
-                $message->to(self::$notificationEmail)
-                    ->subject($subject);
-            });
-            */
-            
-            return true;
-        } catch (\Exception $e) {
-            Log::error('Failed to process notification: ' . $e->getMessage());
-            return false;
+            return true; // Return success without sending notification
         }
+        
+        // Set cooldown cache - this will prevent additional notifications for the next minute
+        cache()->put($cacheKey, true, now()->addMinute());
+        
+        // Log the notification instead of sending email
+        Log::info('ALERT NOTIFICATION (EMAIL DISABLED)', [
+            'subject' => $subject,
+            'message' => $message,
+            'to' => self::$notificationEmail,
+            'check_name' => $check->name,
+            'domain' => $magento,
+            'current_value' => $currentValue . $suffix,
+            'threshold' => $check->comparison_operator . ' ' . $check->threshold_value . $suffix,
+            'timestamp' => now()->format('Y-m-d H:i:s')
+        ]);
+        
+        // Show UI notification
+        Notification::make()
+            ->title('Alert Triggered')
+            ->body("{$check->name} check for {$magento} has been triggered. Current value: {$currentValue}{$suffix}")
+            ->warning()
+            ->send();
+        
+        return true;
+    } catch (\Exception $e) {
+        Log::error('Failed to process notification: ' . $e->getMessage());
+        return false;
     }
+}
  
     public static function checkWebsiteStatus(string $url, string $urlType = 'primary'): array
     {
