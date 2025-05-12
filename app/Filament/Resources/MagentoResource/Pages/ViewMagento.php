@@ -259,12 +259,12 @@ class ViewMagento extends ViewRecord
                             Section::make('Current System Usage')
                             ->schema([
                                 TextEntry::make('ram_usage')
-                                    ->label('RAM Usage')
+                                    ->label('Memory Usage')
                                     ->state(function () {
                                         $data = MagentoResource::getSystemTestData();
                         
                                         if (!isset($data['ram'])) {
-                                            return 'No RAM Data';
+                                            return 'No Memory Data';
                                         }
                                         
                                         // Calculate RAM usage percentage
@@ -557,7 +557,7 @@ class ViewMagento extends ViewRecord
                                                         // Type name
                                                         $typeName = match($check->check_type) {
                                                             'cpu' => 'CPU Usage',
-                                                            'ram' => 'Ram Usage',
+                                                            'ram' => 'Memory Usage',
                                                             'disk' => 'Disk Space',
                                                             default => $check->check_type
                                                         };

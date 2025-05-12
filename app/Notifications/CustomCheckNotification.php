@@ -32,6 +32,7 @@ class CustomCheckNotification extends Notification implements ShouldQueue
      */
     public function via($notifiable)
     {
+        // Use the sync queue driver to process notifications immediately
         return ['mail'];
     }
 

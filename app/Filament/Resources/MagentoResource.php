@@ -136,7 +136,7 @@ class MagentoResource extends Resource
                     ->color(fn (string $state): string => $state === 'Live' ? 'success' : 'danger'),
                    
                 TextColumn::make('ram_usage')
-                    ->label('Ram')
+                    ->label('Memory Usage')
                     ->state(function () {
                         $data = MagentoResource::getSystemTestData();
                         
@@ -362,7 +362,7 @@ public static function checkCustomMetrics(Magento $record): void
         // Get type name for notifications
         $typeName = match($check->check_type) {
             'cpu' => 'CPU Usage',
-            'ram' => 'Memory Usage',
+            'ram' => 'Disk Space',
             'disk' => 'Disk Space',
             default => $check->check_type
         };
