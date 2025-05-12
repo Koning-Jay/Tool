@@ -3,11 +3,10 @@
 namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class CustomCheckNotification extends Notification implements ShouldQueue
+class CustomCheckNotification extends Notification
 {
     use Queueable;
 
@@ -32,7 +31,6 @@ class CustomCheckNotification extends Notification implements ShouldQueue
      */
     public function via($notifiable)
     {
-        // Use the sync queue driver to process notifications immediately
         return ['mail'];
     }
 
@@ -45,7 +43,7 @@ class CustomCheckNotification extends Notification implements ShouldQueue
     public function toMail($notifiable)
     {
         return (new MailMessage)
-            ->subject("ALERT: {$this->data['check_name']} check triggered for {$this->data['domain_name']}")
+            ->subject("⚠️ALERT: {$this->data['check_name']} check triggered for {$this->data['domain_name']}")
             ->line("A custom check alert has been triggered for {$this->data['domain_name']}.")
             ->line("Check name: {$this->data['check_name']}")
             ->line("Check type: {$this->data['check_type']}")
