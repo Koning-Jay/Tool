@@ -13,7 +13,6 @@ class Magento extends Model
         'url',
         'secondary_url',  
         'tertiary_url',   
-        'api_key',
         'notification_emails'
     ];
     protected $casts = [

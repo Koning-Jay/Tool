@@ -61,8 +61,7 @@ class MagentoResource extends Resource
                             ->label('Tertiary URL (Optional)')
                             ->url()
                             ->maxLength(255),
-                        Forms\Components\TextInput::make('api_key')
-                            ->maxLength(255),
+                     
                         Forms\Components\TagsInput::make('notification_emails')
                             ->label('Notification Emails')
                             ->placeholder('Add email addresses for downtime alerts')

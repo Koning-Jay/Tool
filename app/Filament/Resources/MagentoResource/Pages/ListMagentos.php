@@ -6,6 +6,8 @@ use App\Filament\Resources\MagentoResource;
 use Filament\Actions;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Notifications\Notification;
+use Filament\Support\Facades\FilamentIcon;
+
 
 class ListMagentos extends ListRecords
 {
