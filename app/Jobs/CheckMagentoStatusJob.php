@@ -11,14 +11,13 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
 use Croustibat\FilamentJobsMonitor\Traits\QueueProgress;
 
-
 class CheckMagentoStatusJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, QueueProgress;
 
     protected $magentoId;
     public $timeout = 300; // 5 minutes
-    public $tries = 3;     // Don't retry by default
+    public $tries = 3;
 
     /**
      * Create a new job instance.
@@ -40,13 +39,18 @@ class CheckMagentoStatusJob implements ShouldQueue
     public function handle()
     {
         Log::info('Starting Magento status check job', ['magento_id' => $this->magentoId]);
-
+        
         try {
+            // Start tracking progress
+            $this->setProgress(0, 100);
+            
             if ($this->magentoId) {
                 $output = Artisan::call('magento:check-status', ['id' => $this->magentoId]);
             } else {
                 $output = Artisan::call('magento:check-status');
             }
+            
+            $this->setProgress(50, 100);
 
             // Get the output of the command
             $outputText = Artisan::output();
@@ -54,18 +58,21 @@ class CheckMagentoStatusJob implements ShouldQueue
                 'exit_code' => $output,
                 'output' => $outputText
             ]);
-
+            
             // Append to log file
             file_put_contents(
-                storage_path('logs/website-checks.log'), 
-                '[' . date('Y-m-d H:i:s') . '] ' . $outputText . PHP_EOL, 
+                storage_path('logs/website-checks.log'),
+                '[' . date('Y-m-d H:i:s') . '] ' . $outputText . PHP_EOL,
                 FILE_APPEND
             );
+            
+            $this->setProgress(100, 100);
         } catch (\Exception $e) {
             Log::error('Magento status check failed', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
+            
             throw $e;
         }
     }

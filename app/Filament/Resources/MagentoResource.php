@@ -22,6 +22,7 @@ use Filament\Forms\Components\Card;
 use Illuminate\Support\Facades\Notification as FacadesNotification;
 use Illuminate\Support\Facades\Log;
 
+
 class MagentoResource extends Resource
 {
     protected static ?string $model = Magento::class;
@@ -99,7 +100,8 @@ class MagentoResource extends Resource
     
                 TextColumn::make('status')
                     ->label('Status')
-                    ->state(function (Magento $record) {
+              ->state(function (Magento $record) {
+
                         $statuses = [];
                         
                         $primaryCheck = $record->checks()
