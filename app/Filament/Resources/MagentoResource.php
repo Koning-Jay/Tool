@@ -18,7 +18,7 @@ use Illuminate\Validation\Rule;
 use Filament\Notifications\Notification;
 use App\Notifications\WebsiteDownNotification;
 use App\Notifications\CustomCheckNotification;
-use Filament\Forms\Components\Card;
+use Filament\Infolists\Components\Card;
 use Illuminate\Support\Facades\Notification as FacadesNotification;
 use Illuminate\Support\Facades\Log;
         use Illuminate\Support\Facades\Mail;
