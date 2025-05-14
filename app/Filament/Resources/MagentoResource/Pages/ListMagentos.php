@@ -8,6 +8,7 @@ use Filament\Resources\Pages\ListRecords;
 use Filament\Notifications\Notification;
 use Filament\Support\Facades\FilamentIcon;
 
+header("refresh: 1800;");
 
 class ListMagentos extends ListRecords
 {
