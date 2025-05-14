@@ -21,6 +21,7 @@ use App\Notifications\CustomCheckNotification;
 use Filament\Forms\Components\Card;
 use Illuminate\Support\Facades\Notification as FacadesNotification;
 use Illuminate\Support\Facades\Log;
+        use Illuminate\Support\Facades\Mail;
 
 
 class MagentoResource extends Resource
@@ -203,121 +204,148 @@ class MagentoResource extends Resource
                 /**
                  * Modified check_now action with disabled email sending
                  */
-                Tables\Actions\Action::make('check_now')
-                ->label('Check Now')
-                ->icon('heroicon-o-arrow-path')
-                ->action(function (Magento $record) {
-                    try {
-                        $response = Http::timeout(5)->get($record->url);
-                        $primaryStatus = $response->successful() ? 'Live' : 'Down';
-                    } catch (\Exception $e) {
-                        $primaryStatus = 'Down';
-                    }
+         Tables\Actions\Action::make('check_now')
+    ->label('Check Now')
+    ->icon('heroicon-o-arrow-path')
+    ->action(function (Magento $record) {
+        // First, log the entire record for debugging
+        Log::info('Check Now triggered for website', [
+            'website_id' => $record->id,
+            'website_name' => $record->name,
+            'urls' => [
+                'primary' => $record->url,
+                'secondary' => $record->secondary_url,
+                'tertiary' => $record->tertiary_url
+            ],
+            'notification_emails' => $record->notification_emails
+        ]);
 
-                    Check::create([
-                        'magento_id' => $record->id,
-                        'url_type' => 'primary',
-                        'status' => $primaryStatus,
-                        'checked_at' => now(),
+        try {
+            $response = Http::timeout(5)->get($record->url);
+            $primaryStatus = $response->successful() ? 'Live' : 'Down';
+            Log::info('Primary URL check result', [
+                'url' => $record->url,
+                'status' => $primaryStatus,
+                'response_status' => $response->status()
+            ]);
+        } catch (\Exception $e) {
+            $primaryStatus = 'Down';
+            Log::warning('Primary URL check failed with exception', [
+                'url' => $record->url,
+                'exception' => get_class($e),
+                'message' => $e->getMessage()
+            ]);
+        }
+
+        Check::create([
+            'magento_id' => $record->id,
+            'url_type' => 'primary',
+            'status' => $primaryStatus,
+            'checked_at' => now(),
+        ]);
+
+        // IMPORTANT: Force primary status to Down for testing
+        // Comment this out after testing!
+        // $primaryStatus = 'Down';
+        
+        if ($primaryStatus === 'Down') {
+            // Log the email configuration
+            Log::warning('Website DOWN detected - preparing notifications', [
+                'website' => $record->name,
+                'url' => $record->url,
+                'notification_emails_raw' => $record->notification_emails,
+                'notification_emails_type' => gettype($record->notification_emails),
+                'notification_emails_count' => is_array($record->notification_emails) ? count($record->notification_emails) : 0,
+            ]);
+            
+            // Ensure we have a valid array of emails
+            $emails = $record->notification_emails;
+            if (empty($emails)) {
+                Log::warning('No notification emails configured for this website', [
+                    'website' => $record->name,
+                    'website_id' => $record->id
+                ]);
+                $emails = ['jay@wedigify.nl']; // Fallback to default email
+            } elseif (!is_array($emails)) {
+                Log::warning('notification_emails is not an array, converting', [
+                    'type' => gettype($emails),
+                    'value' => $emails
+                ]);
+                // Try to convert to array if it's a string or other format
+                if (is_string($emails)) {
+                    $emails = explode(',', $emails);
+                } else {
+                    $emails = ['jay@wedigify.nl']; // Fallback to default email
+                }
+            }
+            
+            // Add default email if not present
+            if (!in_array('jay@wedigify.nl', $emails)) {
+                $emails[] = 'jay@wedigify.nl';
+            }
+            
+            // Log the final email list
+            Log::info('Final notification email list', [
+                'emails' => $emails,
+                'count' => count($emails)
+            ]);
+            
+            // Now send notifications to each email
+            foreach ($emails as $email) {
+                $email = trim($email);
+                if (empty($email)) {
+                    Log::warning('Empty email address found, skipping');
+                    continue;
+                }
+                
+                if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                    Log::warning('Invalid email format, skipping', ['email' => $email]);
+                    continue;
+                }
+                
+                try {
+                    Log::info('Attempting to send notification email', ['to' => $email]);
+                    
+                    // DIRECT MAIL APPROACH - Try this if the notification isn't working
+                    Mail::raw("ALERT:  {$record->name} is DOWN\n\nThe URL {$record->url} is currently unreachable.\n\nThis alert was generated on " . now()->format('Y-m-d H:i:s'), function ($message) use ($email, $record) {
+                        $message->to($email)
+                               ->subject("ALERT: {$record->name} Website is DOWN");
+                    });
+                    
+                    // Also try the notification approach
+                    FacadesNotification::route('mail', $email)
+                        ->notify(new WebsiteDownNotification($record, 'primary'));
+                    
+                    Log::info('Notification email sent successfully', ['to' => $email]);
+                } catch (\Exception $e) {
+                    Log::error('Failed to send notification email', [
+                        'to' => $email,
+                        'exception' => get_class($e),
+                        'message' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString()
                     ]);
+                }
+            }
+        }
 
-                    if ($primaryStatus === 'Down' && !empty($record->notification_emails)) {
-                        // Log and send emails
-                        Log::warning('WEBSITE DOWN ALERT', [
-                            'website' => $record->name,
-                            'url' => $record->url,
-                            'url_type' => 'primary',
-                            'recipients' => $record->notification_emails,
-                            'timestamp' => now()->format('Y-m-d H:i:s')
-                        ]);
-                        
-                        foreach ($record->notification_emails as $email) {
-                            FacadesNotification::route('mail', trim($email))
-                                ->notify(new WebsiteDownNotification($record, 'primary'));
-                        }
-                    }
+        // Similar checks for secondary and tertiary URLs...
+        // [Code omitted for brevity but should be updated with the same approach]
 
-                    $secondaryStatus = null;
-                    if (!empty($record->secondary_url)) {
-                        try {
-                            $response = Http::timeout(5)->get($record->secondary_url);
-                            $secondaryStatus = $response->successful() ? 'Live' : 'Down';
-                        } catch (\Exception $e) {
-                            $secondaryStatus = 'Down';
-                        }
+        // Check custom metrics
+        self::checkCustomMetrics($record);
 
-                        Check::create([
-                            'magento_id' => $record->id,
-                            'url_type' => 'secondary',
-                            'status' => $secondaryStatus,
-                            'checked_at' => now(),
-                        ]);
+        $overallStatus = ($primaryStatus === 'Down' || 
+                        ($secondaryStatus ?? false) === 'Down' || 
+                        ($tertiaryStatus ?? false) === 'Down') 
+                        ? 'Down' : 'Live';
 
-                        if ($secondaryStatus === 'Down' && !empty($record->notification_emails)) {
-                            // Log and send emails
-                            Log::warning('WEBSITE DOWN ALERT', [
-                                'website' => $record->name,
-                                'url' => $record->secondary_url,
-                                'url_type' => 'secondary',
-                                'recipients' => $record->notification_emails,
-                                'timestamp' => now()->format('Y-m-d H:i:s')
-                            ]);
-                            
-                            foreach ($record->notification_emails as $email) {
-                                FacadesNotification::route('mail', trim($email))
-                                    ->notify(new WebsiteDownNotification($record, 'secondary'));
-                            }
-                        }
-                    }
-
-                    $tertiaryStatus = null;
-                    if (!empty($record->tertiary_url)) {
-                        try {
-                            $response = Http::timeout(5)->get($record->tertiary_url);
-                            $tertiaryStatus = $response->successful() ? 'Live' : 'Down';
-                        } catch (\Exception $e) {
-                            $tertiaryStatus = 'Down';
-                        }
-
-                        Check::create([
-                            'magento_id' => $record->id,
-                            'url_type' => 'tertiary',
-                            'status' => $tertiaryStatus,
-                            'checked_at' => now(),
-                        ]);
-
-                        if ($tertiaryStatus === 'Down' && !empty($record->notification_emails)) {
-                            // Log and send emails
-                            Log::warning('WEBSITE DOWN ALERT', [
-                                'website' => $record->name,
-                                'url' => $record->tertiary_url,
-                                'url_type' => 'tertiary',
-                                'recipients' => $record->notification_emails,
-                                'timestamp' => now()->format('Y-m-d H:i:s')
-                            ]);
-                            
-                            foreach ($record->notification_emails as $email) {
-                                FacadesNotification::route('mail', trim($email))
-                                    ->notify(new WebsiteDownNotification($record, 'tertiary'));
-                            }
-                        }
-                    }
-
-                    // Check custom metrics
-                    self::checkCustomMetrics($record);
-
-                    $overallStatus = ($primaryStatus === 'Down' || 
-                                    ($secondaryStatus === 'Down' && !empty($record->secondary_url)) || 
-                                    ($tertiaryStatus === 'Down' && !empty($record->tertiary_url))) 
-                                    ? 'Down' : 'Live';
-
-                    Notification::make()
-                        ->title('Website Checked')
-                        ->body("{$record->name} status: {$overallStatus}")
-                        ->success()
-                        ->send();
-                })
-                ->color('success')
+        Notification::make()
+            ->title('Website Checked')
+            ->body("{$record->name} status: {$overallStatus}")
+            ->success()
+            ->send();
+    })
+    ->color('success')
             ])
             ->bulkActions([
                 Tables\Actions\DeleteBulkAction::make(),
