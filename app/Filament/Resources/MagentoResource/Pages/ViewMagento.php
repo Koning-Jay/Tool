@@ -25,7 +25,6 @@ class ViewMagento extends ViewRecord
 {
     protected static string $resource = MagentoResource::class;
     
-    // Add a property to store the selected number of checks to display
     public int $checksLimit = 10;
     protected string $notificationEmail = 'Jay@wedigify.nl';
 
@@ -268,9 +267,8 @@ class ViewMagento extends ViewRecord
                                             return 'No Memory Data';
                                         }
                                         
-                                        // Calculate RAM usage percentage
                                         $used = $data['ram']['used_gb'] ?? 0;
-                                        $total = $data['ram']['total_gb'] ?? 1; // Avoid division by zero
+                                        $total = $data['ram']['total_gb'] ?? 1; 
                                         $usagePercent = round(($used / $total) * 100, 2);
                         
                                         return $usagePercent . '% (' . $used . ' MB used of ' . $total . ' MB)';
@@ -285,9 +283,8 @@ class ViewMagento extends ViewRecord
                                             return 'No Disk Data';
                                         }
                                         
-                                        // Calculate Disk usage percentage
                                         $used = $data['disk']['used_gb'] ?? 0;
-                                        $total = $data['disk']['total_gb'] ?? 1; // Avoid division by zero
+                                        $total = $data['disk']['total_gb'] ?? 1; 
                                         $usagePercent = round(($used / $total) * 100, 2);
                         
                                         return $usagePercent . '% (' . $used . ' GB used of ' . $total . ' GB)';
@@ -302,9 +299,8 @@ class ViewMagento extends ViewRecord
                                             return 'No CPU Data';
                                         }
                                         
-                                        // Calculate CPU usage percentage using the same method as in the command
                                         $used = $data['cpu']['used_gb'] ?? 0;
-                                        $total = $data['cpu']['total_gb'] ?? 1; // Avoid division by zero
+                                        $total = $data['cpu']['total_gb'] ?? 1; 
                                         $usagePercent = round(($used / $total) * 100, 2);
                         
                                         return $usagePercent . '% (' . $used . ' GB used of ' . $total . ' GB)';
@@ -536,18 +532,14 @@ class ViewMagento extends ViewRecord
                                                         return '<div class="text-gray-500 italic p-6 text-center text-lg">No custom checks assigned to this Magento page</div>';
                                                     }
                                                     
-                                                    // Get current system metrics for comparison
                                                     $systemData = MagentoResource::getSystemTestData();
                                                     
-                                                    // Adjust grid layout to 4 columns
                                                     $html = '<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 w-full">';
                                                     foreach ($checks as $check) {
-                                                        // Skip CPU load check type as it's being removed
                                                         if ($check->check_type === 'cpu_load') {
                                                             continue;
                                                         }
                                                         
-                                                        // Type color
                                                         $typeColor = match($check->check_type) {
                                                             'cpu' => 'bg-blue-100 text-blue-800',
                                                             'ram' => 'bg-red-100 text-red-800',
@@ -555,7 +547,6 @@ class ViewMagento extends ViewRecord
                                                             default => 'bg-gray-100 text-gray-800'
                                                         };
                                                     
-                                                        // Type name
                                                         $typeName = match($check->check_type) {
                                                             'cpu' => 'CPU Usage',
                                                             'ram' => 'Memory Usage',
@@ -572,7 +563,6 @@ class ViewMagento extends ViewRecord
                                                             ? '<span class="px-3 py-1 text-sm font-medium rounded-full bg-green-100 text-green-800">Active</span>' 
                                                             : '<span class="px-3 py-1 text-sm font-medium rounded-full bg-gray-100 text-gray-800">Inactive</span>';
                                                         
-                                                        // Get current metric value based on check type
                                                         $currentValue = null;
                                                         $isTriggered = false;
                                                         
@@ -617,7 +607,6 @@ class ViewMagento extends ViewRecord
                                                         
                                                         $html .= '<div class="border rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow duration-200 ' . ($isTriggered ? 'border-red-300 bg-red-50' : '') . '">';
                                                         
-                                                        // Header with name and active status
                                                         $html .= '<div class="flex items-center justify-between mb-4">';
                                                         $html .= '<div class="text-2xl font-medium">' . $check->name . '</div>';
                                                         $html .= $status;
@@ -625,13 +614,11 @@ class ViewMagento extends ViewRecord
                                                     
                                                         $html .= '<div class="space-y-4 mb-4">';
                                                     
-                                                        // Check type
                                                         $html .= '<div class="flex flex-col space-y-1">';
                                                         $html .= '<span class="text-sm text-gray-500">Type</span>';
                                                         $html .= '<span class="px-3 py-2 text-base font-medium rounded-md inline-block ' . $typeColor . '">' . $typeName . '</span>';
                                                         $html .= '</div>';
                                                     
-                                                        // Check parameters
                                                         $html .= '<div class="flex flex-col space-y-1">';
                                                         $html .= '<span class="text-sm text-gray-500">Operator</span>';
                                                         $html .= '<span class="text-base font-medium">' . $check->comparison_operator . '</span>';
@@ -642,11 +629,9 @@ class ViewMagento extends ViewRecord
                                                         $html .= '<span class="text-base font-medium">' . $check->threshold_value . $suffix . '</span>';
                                                         $html .= '</div>';
                                                         
-                                                        // Current value and status
                                                         if ($currentValue !== null) {
                                                             $valueColor = $isTriggered ? 'text-red-600 font-bold' : 'text-green-600';
                                                             
-                                                            // Added current metric value display
                                                             $html .= '<div class="flex flex-col space-y-1">';
                                                             $html .= '<span class="text-sm text-gray-500">Current Value</span>';
                                                             $html .= '<span class="text-base font-medium ' . $valueColor . '">' . $currentValue . $suffix . '</span>';
@@ -667,10 +652,8 @@ class ViewMagento extends ViewRecord
                                                     
                                                         $html .= '</div>';
                                                     
-                                                        // Action buttons
                                                         $html .= '<div class="mt-6 flex space-x-2">';
                                                         
-                                                        // Edit button
                                                         $html .= '<a href="' . CustomchecksResource::getUrl('edit', ['record' => $check]) . '" 
                                                             class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm 
                                                             text-base font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 
@@ -701,14 +684,12 @@ class ViewMagento extends ViewRecord
     protected function sendMailchimpNotification($subject, $message)
     {
         try {
-            // Log the notification for testing
             Log::info('ALERT NOTIFICATION WOULD BE SENT', [
                 'subject' => $subject,
                 'message' => $message,
                 'to' => $this->notificationEmail
             ]);
             
-            // Return true to simulate successful sending
             return true;
             
             /* Comment out actual Mailchimp sending for testing
