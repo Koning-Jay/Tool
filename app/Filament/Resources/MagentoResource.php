@@ -309,7 +309,7 @@ class MagentoResource extends Resource
                     // DIRECT MAIL APPROACH - Try this if the notification isn't working
                     Mail::raw("ALERT:  {$record->name} is DOWN\n\nThe URL {$record->url} is currently unreachable.\n\nThis alert was generated on " . now()->format('Y-m-d H:i:s'), function ($message) use ($email, $record) {
                         $message->to($email)
-                               ->subject("ALERT: {$record->name} Website is DOWN");
+                               ->subject("ALERT: {$record->name}  is DOWN");
                     });
                     
                     // Also try the notification approach
