@@ -38,14 +38,37 @@ class CustomchecksResource extends Resource
                         
                         Forms\Components\Grid::make(2)
                             ->schema([
-                                Forms\Components\Select::make('check_type')
-                                    ->options([
-                                        'cpu' => 'CPU Usage',
-                                        'ram' => 'Memory Usage',
-                                        'disk' => 'Disk Usage',
-                                    ])
-                                    ->required()
-                                    ->reactive()
+Forms\Components\Select::make('check_type')
+    ->label('Check Type')
+    ->options(function (callable $get) {
+        // Default check types
+        $options = [
+            'cpu' => 'CPU Usage',
+            'ram' => 'Memory Usage',
+            'disk' => 'Disk Space'
+        ];
+
+        // Get selected domains
+        $selectedDomains = $get('magentos');
+        if (!empty($selectedDomains)) {
+            // Get all selected domains' health check files
+            $healthCheckFiles = \App\Models\Magento::whereIn('id', $selectedDomains)
+                ->pluck('health_check_file')
+                ->unique()
+                ->toArray();
+
+            // For each health check file, get available metrics
+            foreach ($healthCheckFiles as $file) {
+                $additionalOptions = \App\Models\Customchecks::getAvailableCheckTypes($file);
+                // Merge with existing options, preserving unique keys
+                $options = array_merge($options, $additionalOptions);
+            }
+        }
+
+        return $options;
+    })
+    ->reactive()
+    ->required()
                                     ->label('Check Type')
                                     ->helperText('Select the metric to monitor'),
                                 

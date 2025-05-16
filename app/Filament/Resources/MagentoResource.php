@@ -17,7 +17,8 @@ use App\Notifications\WebsiteDownNotification;
 use App\Notifications\CustomCheckNotification;
 use Illuminate\Support\Facades\Notification as FacadesNotification;
 use Illuminate\Support\Facades\Log;
-        use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 
 
 class MagentoResource extends Resource
@@ -36,6 +37,8 @@ class MagentoResource extends Resource
 
     public static function form(Form $form): Form
     {
+        $healthCheckFiles = self::getAvailableHealthCheckFiles();
+
         return $form
             ->schema([
                 Forms\Components\Card::make()
@@ -58,6 +61,13 @@ class MagentoResource extends Resource
                             ->label('Tertiary URL (Optional)')
                             ->url()
                             ->maxLength(255),
+                        
+                        Forms\Components\Select::make('health_check_file')
+                            ->label('Health Check File')
+                            ->options($healthCheckFiles)
+                            ->default('healthcheck.php')
+                            ->helperText('Select which health check file to use for metrics')
+                            ->required(),
                      
                         Forms\Components\TagsInput::make('notification_emails')
                             ->label('Notification Emails')
@@ -75,6 +85,35 @@ class MagentoResource extends Resource
             ]);
     }
 
+    /**
+     * Get list of available health check files in the storage/app directory
+     * 
+     * @return array
+     */
+    protected static function getAvailableHealthCheckFiles(): array
+    {
+        try {
+            $files = Storage::files();
+            $healthCheckFiles = [];
+            
+            foreach ($files as $file) {
+                if (str_contains($file, 'healthcheck') && pathinfo($file, PATHINFO_EXTENSION) === 'php') {
+                    $healthCheckFiles[basename($file)] = basename($file);
+                }
+            }
+            
+            // Ensure default healthcheck.php is in the list
+            if (!array_key_exists('healthcheck.php', $healthCheckFiles)) {
+                $healthCheckFiles['healthcheck.php'] = 'healthcheck.php';
+            }
+            
+            return $healthCheckFiles;
+        } catch (\Exception $e) {
+            Log::error('Error getting health check files: ' . $e->getMessage());
+            return ['healthcheck.php' => 'healthcheck.php'];
+        }
+    }
+
     public static function table(Table $table): Table
     {
         return $table
@@ -82,7 +121,10 @@ class MagentoResource extends Resource
                 Tables\Columns\TextColumn::make('name')
                     ->label('Name')
                     ->searchable(),
-                    Tables\Columns\TextColumn::make('customchecks.name')
+                Tables\Columns\TextColumn::make('health_check_file')
+                    ->label('Health Check File')
+                    ->default('healthcheck.php'),
+                Tables\Columns\TextColumn::make('customchecks.name')
                     ->label('Assigned Custom Checks')
                     ->formatStateUsing(function ($record) {
                         $checks = $record->customchecks;
@@ -96,7 +138,7 @@ class MagentoResource extends Resource
     
                 TextColumn::make('status')
                     ->label('Status')
-              ->state(function (Magento $record) {
+                    ->state(function (Magento $record) {
 
                         $statuses = [];
                         
@@ -134,8 +176,8 @@ class MagentoResource extends Resource
                    
                 TextColumn::make('ram_usage')
                     ->label('Memory Usage')
-                    ->state(function () {
-                        $data = MagentoResource::getSystemTestData();
+                    ->state(function (Magento $record) {
+                        $data = MagentoResource::getSystemTestData($record);
                         
                         if (!isset($data['ram'])) {
                             return 'No Ram Data';
@@ -150,8 +192,8 @@ class MagentoResource extends Resource
                 
                 TextColumn::make('disk_usage')
                     ->label('Disk Usage')
-                    ->state(function () {
-                        $data = MagentoResource::getSystemTestData();
+                    ->state(function (Magento $record) {
+                        $data = MagentoResource::getSystemTestData($record);
                         
                         if (!isset($data['disk'])) {
                             return 'No Disk Data';
@@ -166,13 +208,12 @@ class MagentoResource extends Resource
                 
                 TextColumn::make('cpu_usage')
                     ->label('Cpu Usage')
-                    ->state(function () {
-                        $data = MagentoResource::getSystemTestData();
+                    ->state(function (Magento $record) {
+                        $data = MagentoResource::getSystemTestData($record);
                         
                         if (!isset($data['cpu'])) {
                             return 'No CPU Data';
                         }
-                        
                         
                         $used = $data['cpu']['used_gb'] ?? 0;
                         $total = $data['cpu']['total_gb'] ?? 1; 
@@ -194,137 +235,137 @@ class MagentoResource extends Resource
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make(),
     
-             
-         Tables\Actions\Action::make('check_now')
-    ->label('Check Now')
-    ->icon('heroicon-o-arrow-path')
-    ->action(function (Magento $record) {
-        Log::info('Check Now triggered for website', [
-            'website_id' => $record->id,
-            'website_name' => $record->name,
-            'urls' => [
-                'primary' => $record->url,
-                'secondary' => $record->secondary_url,
-                'tertiary' => $record->tertiary_url
-            ],
-            'notification_emails' => $record->notification_emails
-        ]);
-
-        try {
-            $response = Http::timeout(5)->get($record->url);
-            $primaryStatus = $response->successful() ? 'Live' : 'Down';
-            Log::info('Primary URL check result', [
-                'url' => $record->url,
-                'status' => $primaryStatus,
-                'response_status' => $response->status()
-            ]);
-        } catch (\Exception $e) {
-            $primaryStatus = 'Down';
-            Log::warning('Primary URL check failed with exception', [
-                'url' => $record->url,
-                'exception' => get_class($e),
-                'message' => $e->getMessage()
-            ]);
-        }
-
-        Check::create([
-            'magento_id' => $record->id,
-            'url_type' => 'primary',
-            'status' => $primaryStatus,
-            'checked_at' => now(),
-        ]);
-
-    
-        
-        if ($primaryStatus === 'Down') {
-            Log::warning('Website DOWN detected - preparing notifications', [
-                'website' => $record->name,
-                'url' => $record->url,
-                'notification_emails_raw' => $record->notification_emails,
-                'notification_emails_type' => gettype($record->notification_emails),
-                'notification_emails_count' => is_array($record->notification_emails) ? count($record->notification_emails) : 0,
-            ]);
-            
-            $emails = $record->notification_emails;
-            if (empty($emails)) {
-                Log::warning('No notification emails configured for this website', [
-                    'website' => $record->name,
-                    'website_id' => $record->id
-                ]);
-                $emails = ['jay@wedigify.nl']; 
-            } elseif (!is_array($emails)) {
-                Log::warning('notification_emails is not an array, converting', [
-                    'type' => gettype($emails),
-                    'value' => $emails
-                ]);
-                if (is_string($emails)) {
-                    $emails = explode(',', $emails);
-                } else {
-                    $emails = ['jay@wedigify.nl']; 
-                }
-            }
-            
-            if (!in_array('jay@wedigify.nl', $emails)) {
-                $emails[] = 'jay@wedigify.nl';
-            }
-            
-            Log::info('Final notification email list', [
-                'emails' => $emails,
-                'count' => count($emails)
-            ]);
-            
-            foreach ($emails as $email) {
-                $email = trim($email);
-                if (empty($email)) {
-                    Log::warning('Empty email address found, skipping');
-                    continue;
-                }
-                
-                if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                    Log::warning('Invalid email format, skipping', ['email' => $email]);
-                    continue;
-                }
-                
-                try {
-                    Log::info('Attempting to send notification email', ['to' => $email]);
-                    
-                    // DIRECT MAIL APPROACH - Try this if the notification isn't working
-                    Mail::raw("ALERT:  {$record->name} is DOWN\n\nThe URL {$record->url} is currently unreachable.\n\nThis alert was generated on " . now()->format('Y-m-d H:i:s'), function ($message) use ($email, $record) {
-                        $message->to($email)
-                               ->subject("ALERT: {$record->name}  is DOWN");
-                    });
-                    
-                    // Also try the notification approach
-                    FacadesNotification::route('mail', $email)
-                        ->notify(new WebsiteDownNotification($record, 'primary'));
-                    
-                    Log::info('Notification email sent successfully', ['to' => $email]);
-                } catch (\Exception $e) {
-                    Log::error('Failed to send notification email', [
-                        'to' => $email,
-                        'exception' => get_class($e),
-                        'message' => $e->getMessage(),
-                        'trace' => $e->getTraceAsString()
+            Tables\Actions\Action::make('check_now')
+                ->label('Check Now')
+                ->icon('heroicon-o-arrow-path')
+                ->action(function (Magento $record) {
+                    Log::info('Check Now triggered for website', [
+                        'website_id' => $record->id,
+                        'website_name' => $record->name,
+                        'urls' => [
+                            'primary' => $record->url,
+                            'secondary' => $record->secondary_url,
+                            'tertiary' => $record->tertiary_url
+                        ],
+                        'notification_emails' => $record->notification_emails,
+                        'health_check_file' => $record->health_check_file
                     ]);
-                }
-            }
-        }
+
+                    try {
+                        $response = Http::timeout(5)->get($record->url);
+                        $primaryStatus = $response->successful() ? 'Live' : 'Down';
+                        Log::info('Primary URL check result', [
+                            'url' => $record->url,
+                            'status' => $primaryStatus,
+                            'response_status' => $response->status()
+                        ]);
+                    } catch (\Exception $e) {
+                        $primaryStatus = 'Down';
+                        Log::warning('Primary URL check failed with exception', [
+                            'url' => $record->url,
+                            'exception' => get_class($e),
+                            'message' => $e->getMessage()
+                        ]);
+                    }
+
+                    Check::create([
+                        'magento_id' => $record->id,
+                        'url_type' => 'primary',
+                        'status' => $primaryStatus,
+                        'checked_at' => now(),
+                    ]);
+
+                
+                    
+                    if ($primaryStatus === 'Down') {
+                        Log::warning('Website DOWN detected - preparing notifications', [
+                            'website' => $record->name,
+                            'url' => $record->url,
+                            'notification_emails_raw' => $record->notification_emails,
+                            'notification_emails_type' => gettype($record->notification_emails),
+                            'notification_emails_count' => is_array($record->notification_emails) ? count($record->notification_emails) : 0,
+                        ]);
+                        
+                        $emails = $record->notification_emails;
+                        if (empty($emails)) {
+                            Log::warning('No notification emails configured for this website', [
+                                'website' => $record->name,
+                                'website_id' => $record->id
+                            ]);
+                            $emails = ['jay@wedigify.nl']; 
+                        } elseif (!is_array($emails)) {
+                            Log::warning('notification_emails is not an array, converting', [
+                                'type' => gettype($emails),
+                                'value' => $emails
+                            ]);
+                            if (is_string($emails)) {
+                                $emails = explode(',', $emails);
+                            } else {
+                                $emails = ['jay@wedigify.nl']; 
+                            }
+                        }
+                        
+                        if (!in_array('jay@wedigify.nl', $emails)) {
+                            $emails[] = 'jay@wedigify.nl';
+                        }
+                        
+                        Log::info('Final notification email list', [
+                            'emails' => $emails,
+                            'count' => count($emails)
+                        ]);
+                        
+                        foreach ($emails as $email) {
+                            $email = trim($email);
+                            if (empty($email)) {
+                                Log::warning('Empty email address found, skipping');
+                                continue;
+                            }
+                            
+                            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                                Log::warning('Invalid email format, skipping', ['email' => $email]);
+                                continue;
+                            }
+                            
+                            try {
+                                Log::info('Attempting to send notification email', ['to' => $email]);
+                                
+                                // DIRECT MAIL APPROACH - Try this if the notification isn't working
+                                Mail::raw("ALERT:  {$record->name} is DOWN\n\nThe URL {$record->url} is currently unreachable.\n\nThis alert was generated on " . now()->format('Y-m-d H:i:s'), function ($message) use ($email, $record) {
+                                    $message->to($email)
+                                           ->subject("ALERT: {$record->name}  is DOWN");
+                                });
+                                
+                                // Also try the notification approach
+                                FacadesNotification::route('mail', $email)
+                                    ->notify(new WebsiteDownNotification($record, 'primary'));
+                                
+                                Log::info('Notification email sent successfully', ['to' => $email]);
+                            } catch (\Exception $e) {
+                                Log::error('Failed to send notification email', [
+                                    'to' => $email,
+                                    'exception' => get_class($e),
+                                    'message' => $e->getMessage(),
+                                    'trace' => $e->getTraceAsString()
+                                ]);
+                            }
+                        }
+                    }
 
 
-        self::checkCustomMetrics($record);
+                    self::checkCustomMetrics($record);
 
-        $overallStatus = ($primaryStatus === 'Down' || 
-                        ($secondaryStatus ?? false) === 'Down' || 
-                        ($tertiaryStatus ?? false) === 'Down') 
-                        ? 'Down' : 'Live';
+                    $overallStatus = ($primaryStatus === 'Down' || 
+                                    ($secondaryStatus ?? false) === 'Down' || 
+                                    ($tertiaryStatus ?? false) === 'Down') 
+                                    ? 'Down' : 'Live';
 
-        Notification::make()
-            ->title('Website Checked')
-            ->body("{$record->name} status: {$overallStatus}")
-            ->success()
-            ->send();
-    })
-    ->color('success')
+                    Notification::make()
+                        ->title('Website Checked')
+                        ->body("{$record->name} status: {$overallStatus}")
+                        ->success()
+                        ->send();
+                })
+                ->color('success')
             ])
             ->bulkActions([
                 Tables\Actions\DeleteBulkAction::make(),
@@ -334,232 +375,226 @@ class MagentoResource extends Resource
             );
     }
 
-
     /**
      * Check custom metrics and send notifications if thresholds are exceeded
      */
-
-
-/**
- * Check custom metrics and send notifications if thresholds are exceeded
- */
-public static function checkCustomMetrics(Magento $record): void
-{
-    $systemData = self::getSystemTestData();
-    
-    Log::info('System data retrieved for custom metrics check', [
-        'domain' => $record->name,
-        'system_data' => $systemData
-    ]);
-    
-    $customChecks = $record->customchecks;
-    
-    if ($customChecks->isEmpty()) {
-        return;
-    }
-    
-    foreach ($customChecks as $check) {
-        if (!$check->is_active) {
-            continue;
-        }
+    public static function checkCustomMetrics(Magento $record): void
+    {
+        $systemData = self::getSystemTestData($record);
         
-        $typeName = match($check->check_type) {
-            'cpu' => 'CPU Usage',
-            'ram' => 'Disk Space',
-            'disk' => 'Disk Space',
-            default => $check->check_type
-        };
-        
-        $suffix = match ($check->check_type) {
-            'cpu', 'ram', 'disk' => '%',
-            default => '',
-        };
-        
-        $currentValue = null;
-        
-        switch ($check->check_type) {
-            case 'cpu':
-                if (!isset($systemData['cpu'])) {
-                    Log::warning('CPU data missing for custom check', [
-                        'check_name' => $check->name,
-                        'domain' => $record->name
-                    ]);
-                    continue 2; 
-                }
-                $used = $systemData['cpu']['used_gb'] ?? 0;
-                $total = $systemData['cpu']['total_gb'] ?? 1;
-                $currentValue = round(($used / $total) * 100, 2);
-                break;
-                
-            case 'ram':
-                if (!isset($systemData['ram'])) {
-                    Log::warning('RAM data missing for custom check', [
-                        'check_name' => $check->name,
-                        'domain' => $record->name
-                    ]);
-                    continue 2; 
-                }
-                $used = $systemData['ram']['used_gb'] ?? 0;
-                $total = $systemData['ram']['total_gb'] ?? 1; 
-                $currentValue = round(($used / $total) * 100, 2);
-                break;
-                
-            case 'disk':
-                if (!isset($systemData['disk'])) {
-                    Log::warning('Disk data missing for custom check', [
-                        'check_name' => $check->name,
-                        'domain' => $record->name
-                    ]);
-                    continue 2; 
-                }
-                $used = $systemData['disk']['used_gb'] ?? 0;
-                $total = $systemData['disk']['total_gb'] ?? 1; 
-                $currentValue = round(($used / $total) * 100, 2);
-                break;
-                
-            default:
-                Log::warning('Unknown check type', [
-                    'check_type' => $check->check_type,
-                    'check_name' => $check->name,
-                    'domain' => $record->name
-                ]);
-                continue 2; 
-        }
-        
-        Log::info('Evaluating custom check', [
+        Log::info('System data retrieved for custom metrics check', [
             'domain' => $record->name,
-            'check_name' => $check->name,
-            'check_type' => $check->check_type,
-            'current_value' => $currentValue,
-            'threshold' => $check->threshold_value,
-            'operator' => $check->comparison_operator
+            'system_data' => $systemData,
+            'health_check_file' => $record->health_check_file
         ]);
         
-        $isTriggered = false;
-        switch ($check->comparison_operator) {
-            case 'Greater than':
-                $isTriggered = $currentValue > $check->threshold_value;
-                break;
-            case 'Less than':
-                $isTriggered = $currentValue < $check->threshold_value;
-                break;
-            case 'Equal to':
-                $isTriggered = $currentValue == $check->threshold_value;
-                break;
+        $customChecks = $record->customchecks;
+        
+        if ($customChecks->isEmpty()) {
+            return;
         }
         
-        if ($isTriggered) {
-            Log::info('Check triggered!', [
+        foreach ($customChecks as $check) {
+            if (!$check->is_active) {
+                continue;
+            }
+            
+            $typeName = match($check->check_type) {
+                'cpu' => 'CPU Usage',
+                'ram' => 'Memory Usage',
+                'disk' => 'Disk Space',
+                default => $check->check_type
+            };
+            
+            $suffix = match ($check->check_type) {
+                'cpu', 'ram', 'disk' => '%',
+                default => '',
+            };
+            
+            $currentValue = null;
+            
+            switch ($check->check_type) {
+                case 'cpu':
+                    if (!isset($systemData['cpu'])) {
+                        Log::warning('CPU data missing for custom check', [
+                            'check_name' => $check->name,
+                            'domain' => $record->name
+                        ]);
+                        continue 2; 
+                    }
+                    $used = $systemData['cpu']['used_gb'] ?? 0;
+                    $total = $systemData['cpu']['total_gb'] ?? 1;
+                    $currentValue = round(($used / $total) * 100, 2);
+                    break;
+                    
+                case 'ram':
+                    if (!isset($systemData['ram'])) {
+                        Log::warning('RAM data missing for custom check', [
+                            'check_name' => $check->name,
+                            'domain' => $record->name
+                        ]);
+                        continue 2; 
+                    }
+                    $used = $systemData['ram']['used_gb'] ?? 0;
+                    $total = $systemData['ram']['total_gb'] ?? 1; 
+                    $currentValue = round(($used / $total) * 100, 2);
+                    break;
+                    
+                case 'disk':
+                    if (!isset($systemData['disk'])) {
+                        Log::warning('Disk data missing for custom check', [
+                            'check_name' => $check->name,
+                            'domain' => $record->name
+                        ]);
+                        continue 2; 
+                    }
+                    $used = $systemData['disk']['used_gb'] ?? 0;
+                    $total = $systemData['disk']['total_gb'] ?? 1; 
+                    $currentValue = round(($used / $total) * 100, 2);
+                    break;
+                    
+                default:
+                    Log::warning('Unknown check type', [
+                        'check_type' => $check->check_type,
+                        'check_name' => $check->name,
+                        'domain' => $record->name
+                    ]);
+                    continue 2; 
+            }
+            
+            Log::info('Evaluating custom check', [
                 'domain' => $record->name,
                 'check_name' => $check->name,
+                'check_type' => $check->check_type,
                 'current_value' => $currentValue,
                 'threshold' => $check->threshold_value,
                 'operator' => $check->comparison_operator
             ]);
             
-            self::sendCustomCheckNotification($record, $check, $typeName, $currentValue, $suffix);
-        }
-    }
-}
-
-
-protected static function sendCustomCheckNotification($record, $check, $typeName, $currentValue, $suffix): bool
-{
-    $magento = $record->name;
-    $subject = "ALERT: {$check->name} check triggered for {$magento}";
-    $message = "The {$check->name} check has been triggered for {$magento}.\n\n" .
-            "Current {$typeName}: {$currentValue}{$suffix}\n" .
-            "Threshold: {$check->comparison_operator} {$check->threshold_value}{$suffix}\n\n" .
-            "This alert was generated on " . now()->format('Y-m-d H:i:s');
-    
-    try {
-        $cacheKey = "notification_cooldown:{$record->id}:{$check->id}";
-        
-        if (cache()->has($cacheKey)) {
-            Log::info('Notification skipped: still in cooldown period', [
-                'check' => $check->name,
-                'domain' => $magento
-            ]);
-            
-            return true; 
-        }
-        
-        cache()->put($cacheKey, true, now()->addMinute());
-        
-        Log::info('ALERT NOTIFICATION SENT', [
-            'subject' => $subject,
-            'message' => $message,
-            'recipients' => $record->notification_emails,
-            'check_name' => $check->name,
-            'domain' => $magento,
-            'current_value' => $currentValue . $suffix,
-            'threshold' => $check->comparison_operator . ' ' . $check->threshold_value . $suffix,
-            'timestamp' => now()->format('Y-m-d H:i:s')
-        ]);
-        
-        Notification::make()
-            ->title('Alert Triggered')
-            ->body("{$check->name} check for {$magento} has been triggered. Current value: {$currentValue}{$suffix}")
-            ->warning()
-            ->send();
-        
-        $emails = $record->notification_emails;
-        if (empty($emails) || !is_array($emails)) {
-            Log::warning('No notification emails configured for domain', [
-                'domain' => $magento
-            ]);
-            return true;
-        }
-        
-        foreach ($emails as $email) {
-            if (empty($email) || !filter_var(trim($email), FILTER_VALIDATE_EMAIL)) {
-                Log::warning('Invalid email address skipped', [
-                    'email' => $email,
-                    'domain' => $magento
-                ]);
-                continue;
+            $isTriggered = false;
+            switch ($check->comparison_operator) {
+                case 'Greater than':
+                    $isTriggered = $currentValue > $check->threshold_value;
+                    break;
+                case 'Less than':
+                    $isTriggered = $currentValue < $check->threshold_value;
+                    break;
+                case 'Equal to':
+                    $isTriggered = $currentValue == $check->threshold_value;
+                    break;
             }
             
-            $notificationData = [
+            if ($isTriggered) {
+                Log::info('Check triggered!', [
+                    'domain' => $record->name,
+                    'check_name' => $check->name,
+                    'current_value' => $currentValue,
+                    'threshold' => $check->threshold_value,
+                    'operator' => $check->comparison_operator
+                ]);
+                
+                self::sendCustomCheckNotification($record, $check, $typeName, $currentValue, $suffix);
+            }
+        }
+    }
+
+    protected static function sendCustomCheckNotification($record, $check, $typeName, $currentValue, $suffix): bool
+    {
+        $magento = $record->name;
+        $subject = "ALERT: {$check->name} check triggered for {$magento}";
+        $message = "The {$check->name} check has been triggered for {$magento}.\n\n" .
+                "Current {$typeName}: {$currentValue}{$suffix}\n" .
+                "Threshold: {$check->comparison_operator} {$check->threshold_value}{$suffix}\n\n" .
+                "This alert was generated on " . now()->format('Y-m-d H:i:s');
+        
+        try {
+            $cacheKey = "notification_cooldown:{$record->id}:{$check->id}";
+            
+            if (cache()->has($cacheKey)) {
+                Log::info('Notification skipped: still in cooldown period', [
+                    'check' => $check->name,
+                    'domain' => $magento
+                ]);
+                
+                return true; 
+            }
+            
+            cache()->put($cacheKey, true, now()->addMinute());
+            
+            Log::info('ALERT NOTIFICATION SENT', [
+                'subject' => $subject,
+                'message' => $message,
+                'recipients' => $record->notification_emails,
                 'check_name' => $check->name,
-                'domain_name' => $magento,
-                'check_type' => $typeName,
+                'domain' => $magento,
                 'current_value' => $currentValue . $suffix,
                 'threshold' => $check->comparison_operator . ' ' . $check->threshold_value . $suffix,
                 'timestamp' => now()->format('Y-m-d H:i:s')
-            ];
+            ]);
             
-            try {
-                FacadesNotification::route('mail', trim($email))
-                    ->notify(new CustomCheckNotification($notificationData));
-                
-                Log::info('Email notification sent', [
-                    'email' => $email,
-                    'domain' => $magento,
-                    'check' => $check->name
+            Notification::make()
+                ->title('Alert Triggered')
+                ->body("{$check->name} check for {$magento} has been triggered. Current value: {$currentValue}{$suffix}")
+                ->warning()
+                ->send();
+            
+            $emails = $record->notification_emails;
+            if (empty($emails) || !is_array($emails)) {
+                Log::warning('No notification emails configured for domain', [
+                    'domain' => $magento
                 ]);
-            } catch (\Exception $e) {
-                Log::error('Failed to send email notification', [
-                    'email' => $email,
-                    'error' => $e->getMessage(),
-                    'domain' => $magento,
-                    'check' => $check->name
-                ]);
+                return true;
             }
+            
+            foreach ($emails as $email) {
+                if (empty($email) || !filter_var(trim($email), FILTER_VALIDATE_EMAIL)) {
+                    Log::warning('Invalid email address skipped', [
+                        'email' => $email,
+                        'domain' => $magento
+                    ]);
+                    continue;
+                }
+                
+                $notificationData = [
+                    'check_name' => $check->name,
+                    'domain_name' => $magento,
+                    'check_type' => $typeName,
+                    'current_value' => $currentValue . $suffix,
+                    'threshold' => $check->comparison_operator . ' ' . $check->threshold_value . $suffix,
+                    'timestamp' => now()->format('Y-m-d H:i:s')
+                ];
+                
+                try {
+                    FacadesNotification::route('mail', trim($email))
+                        ->notify(new CustomCheckNotification($notificationData));
+                    
+                    Log::info('Email notification sent', [
+                        'email' => $email,
+                        'domain' => $magento,
+                        'check' => $check->name
+                    ]);
+                } catch (\Exception $e) {
+                    Log::error('Failed to send email notification', [
+                        'email' => $email,
+                        'error' => $e->getMessage(),
+                        'domain' => $magento,
+                        'check' => $check->name
+                    ]);
+                }
+            }
+            
+            return true;
+        } catch (\Exception $e) {
+            Log::error('Failed to process notification: ' . $e->getMessage(), [
+                'exception' => get_class($e),
+                'trace' => $e->getTraceAsString(),
+                'domain' => $magento,
+                'check' => $check->name
+            ]);
+            return false;
         }
-        
-        return true;
-    } catch (\Exception $e) {
-        Log::error('Failed to process notification: ' . $e->getMessage(), [
-            'exception' => get_class($e),
-            'trace' => $e->getTraceAsString(),
-            'domain' => $magento,
-            'check' => $check->name
-        ]);
-        return false;
-    }
-} 
- 
+    } 
+    
     public static function checkWebsiteStatus(string $url, string $urlType = 'primary'): array
     {
         try {
@@ -573,20 +608,44 @@ protected static function sendCustomCheckNotification($record, $check, $typeName
         } catch (\Exception $e) {
             return [
                 'status' => 'Down',
-                'url_type' => $urlType
-                
+                'url_type' => $urlType  
             ];
-            
         }
     }
 
-   
-    public static function getSystemTestData(): array
+    /**
+     * Get system test data from the selected health check file
+     * 
+     * @param Magento $record
+     * @return array
+     */
+    public static function getSystemTestData(Magento $record = null): array
     {
         try {
-            
             $ch = curl_init();
-            $url = 'https://wedigify.hypernode.io/health_check.php';
+            
+            // Default health check file if not provided
+            $healthCheckFile = 'healthcheck.php';
+            
+            // Use the selected health check file if available
+            if ($record && !empty($record->health_check_file)) {
+                $healthCheckFile = $record->health_check_file;
+            }
+            
+            // Use the storage file path, adjusting to the given structure
+            $localFilePath = 'app/' . $healthCheckFile;
+            
+            // Check if file exists in storage
+            if (!Storage::exists($localFilePath)) {
+                Log::warning("Health check file not found: {$localFilePath}, using default health check endpoint");
+                $url = 'https://wedigify.hypernode.io/health_check.php';
+            } else {
+                // If using a local file for testing/development, you could read it directly
+                // For production, we'll still use a URL but log the file we're targeting
+                Log::info("Using health check file: {$healthCheckFile}");
+                $url = 'https://wedigify.hypernode.io/' . $healthCheckFile;
+            }
+            
             $username = 'dev';
             $password = 'dev';
             
@@ -601,7 +660,9 @@ protected static function sendCustomCheckNotification($record, $check, $typeName
             $response = curl_exec($ch);
             
             if (curl_errno($ch)) {
-                Log::error('cURL error in getSystemTestData: ' . curl_error($ch));
+                Log::error('cURL error in getSystemTestData: ' . curl_error($ch), [
+                    'health_check_file' => $healthCheckFile
+                ]);
                 return self::getDefaultSystemData();
             }
             
@@ -610,26 +671,31 @@ protected static function sendCustomCheckNotification($record, $check, $typeName
             $data = json_decode($response, true);
             
             if (!is_array($data) || empty($data)) {
-                Log::error('Invalid data received from health check API', ['response' => $response]);
+                Log::error('Invalid data received from health check API', [
+                    'response' => $response,
+                    'health_check_file' => $healthCheckFile
+                ]);
                 return self::getDefaultSystemData();
             }
             
             return [
                 'ram' => [
-                    'used_gb' => round($data['memory']['value'], 2),
+                    'used_gb' => round($data['memory']['value'] ?? 0, 2),
                     'total_gb' => 100, 
                 ],
                 'cpu' => [
-                    'used_gb' => (float)$data['cpu']['value'],
+                    'used_gb' => (float)($data['cpu']['value'] ?? 0),
                     'total_gb' => 100, 
                 ],
                 'disk' => [
-                    'used_gb' => round($data['disk_used']['value'] / (1024 * 1024 * 1024), 2), // Convert to GB
-                    'total_gb' => round($data['disk_total']['value'] / (1024 * 1024 * 1024), 2), // Convert to GB
+                    'used_gb' => round(($data['disk_used']['value'] ?? 0) / (1024 * 1024 * 1024), 2), // Convert to GB
+                    'total_gb' => round(($data['disk_total']['value'] ?? 0) / (1024 * 1024 * 1024), 2), // Convert to GB
                 ],
             ];
         } catch (\Exception $e) {
-            Log::error('Exception in getSystemTestData: ' . $e->getMessage());
+            Log::error('Exception in getSystemTestData: ' . $e->getMessage(), [
+                'health_check_file' => $healthCheckFile ?? 'unknown'
+            ]);
             return self::getDefaultSystemData();
         }
     }
@@ -656,8 +722,6 @@ protected static function sendCustomCheckNotification($record, $check, $typeName
         ];
     } 
     
-
-
     public static function getRelations(): array
     {
         return [];

@@ -13,6 +13,7 @@ class Magento extends Model
         'url',
         'secondary_url',  
         'tertiary_url',   
+        'health_check_file',
         'notification_emails'
     ];
     protected $casts = [
