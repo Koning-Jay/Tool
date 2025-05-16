@@ -41,7 +41,6 @@ class CheckMagentoStatusJob implements ShouldQueue
         Log::info('Starting Magento status check job', ['magento_id' => $this->magentoId]);
         
         try {
-            // Start tracking progress
             $this->setProgress(0, 100);
             
             if ($this->magentoId) {
@@ -52,14 +51,12 @@ class CheckMagentoStatusJob implements ShouldQueue
             
             $this->setProgress(50, 100);
 
-            // Get the output of the command
             $outputText = Artisan::output();
             Log::info('Magento status check completed', [
                 'exit_code' => $output,
                 'output' => $outputText
             ]);
             
-            // Append to log file
             file_put_contents(
                 storage_path('logs/website-checks.log'),
                 '[' . date('Y-m-d H:i:s') . '] ' . $outputText . PHP_EOL,

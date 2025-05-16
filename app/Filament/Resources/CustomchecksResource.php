@@ -100,7 +100,6 @@ class CustomchecksResource extends Resource
                                     ->columnSpanFull()
                                     ->searchable()
                                     ->default(function () {
-                                        // Check if we're coming from a ViewMagento page with preselection
                                         $preselectedMagentoId = request()->get('preselect_magento');
                                         
                                         if ($preselectedMagentoId) {
