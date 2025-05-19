@@ -98,7 +98,9 @@ protected static function getAvailableHealthCheckFiles(): array
         $knownFiles = [
             'healthcheck.php' => 'healthcheck.php',
             'Krale_healthcheck.php' => 'Krale_healthcheck.php',
-            'blahealthcheck.php' => 'blahealthcheck.php'
+            'blahealthcheck.php' => 'blahealthcheck.php',
+             'shuz_healthcheck.php' => 'shuz_healthcheck.php'
+
         ];
         
         Log::info('Using known health check files: ' . json_encode(array_keys($knownFiles)));
@@ -136,7 +138,8 @@ protected static function getAvailableHealthCheckFiles(): array
         return [
             'healthcheck.php' => 'healthcheck.php',
             'Krale_healthcheck.php' => 'Krale_healthcheck.php',
-            'blahealthcheck.php' => 'blahealthcheck.php'
+            'blahealthcheck.php' => 'blahealthcheck.php',
+            'shuz_healthcheck.php' => 'shuz_healthcheck.php'
         ];
     }
 }
