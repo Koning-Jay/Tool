@@ -28,6 +28,7 @@ class MagentoResource extends Resource
     protected static ?string $navigationGroup = 'Monitoring';
     protected static ?string $label = 'Domains';
     protected static ?string $navigationLabel = 'Domains';
+        protected static ?string $title = 'Domains';
     protected static string $notificationEmail = 'Jay@wedigify.nl';
 
     public static function getNavigationBadge(): ?string
@@ -86,28 +87,25 @@ class MagentoResource extends Resource
     }
 
  /**
- * Get available health check files from the correct storage location
+ * Get available health check files from the files shown in the screenshot
  * 
  * @return array
  */
 protected static function getAvailableHealthCheckFiles(): array
 {
     try {
-        // Directly hardcode the files we see in the storage/app directory
-        // This ensures we'll definitely find all the health check files we know exist
-        $knownFiles = [
+        // List the files we see in the screenshot
+        $healthCheckFiles = [
             'healthcheck.php' => 'healthcheck.php',
             'Krale_healthcheck.php' => 'Krale_healthcheck.php',
-            'blahealthcheck.php' => 'blahealthcheck.php',
-             'shuz_healthcheck.php' => 'shuz_healthcheck.php'
-
+            'shuz_healthcheck.php' => 'shuz_healthcheck.php',
+            // system_testdata.json is not included as it's not a PHP file
         ];
         
-        Log::info('Using known health check files: ' . json_encode(array_keys($knownFiles)));
+        Log::info('Using health check files from storage/app directory: ' . json_encode(array_keys($healthCheckFiles)));
         
-        // Also try to find any additional files dynamically
+        // Also try to find any additional PHP files dynamically
         $directory = '';
-        $healthCheckFiles = $knownFiles;
         
         if (Storage::exists($directory)) {
             $files = Storage::files($directory);
@@ -125,7 +123,7 @@ protected static function getAvailableHealthCheckFiles(): array
                 }
             }
         } else {
-            Log::warning("Storage app directory not found, using only hardcoded files");
+            Log::warning("Storage app directory not found, using only predefined files");
         }
         
         Log::info('Final available health check files: ' . json_encode($healthCheckFiles));
@@ -134,12 +132,11 @@ protected static function getAvailableHealthCheckFiles(): array
     } catch (\Exception $e) {
         Log::error('Error getting health check files: ' . $e->getMessage());
         
-        // Return all the known files even if there's an error
+        // Return the files we know exist even if there's an error
         return [
             'healthcheck.php' => 'healthcheck.php',
             'Krale_healthcheck.php' => 'Krale_healthcheck.php',
-            'blahealthcheck.php' => 'blahealthcheck.php',
-            'shuz_healthcheck.php' => 'shuz_healthcheck.php'
+            'shuz_healthcheck.php' => 'shuz_healthcheck.php',
         ];
     }
 }
