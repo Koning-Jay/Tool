@@ -14,7 +14,6 @@ class Customchecks extends Model
         'threshold_value',
         'comparison_operator', 
         'is_active',
-        'alert_severity', 
         'notification_emails',
     ];
 
