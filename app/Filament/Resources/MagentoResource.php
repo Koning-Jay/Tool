@@ -87,8 +87,7 @@ class MagentoResource extends Resource
     }
 
  /**
- * Get available health check files from the files shown in the screenshot
- * 
+
  * @return array
  */
 protected static function getAvailableHealthCheckFiles(): array
