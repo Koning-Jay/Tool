@@ -1,29 +1,27 @@
 <?php
-
 namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
+// Remove the ShouldQueue implementation
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Log;
 
-class WebsiteDownNotification extends Notification implements ShouldQueue
+class WebsiteDownNotification extends Notification // Remove ShouldQueue
 {
     use Queueable;
-
+    
     protected $magento;
     protected $urlType;
-
+    
     public function __construct($magento, $urlType)
     {
         $this->magento = $magento;
         $this->urlType = $urlType;
     }
-
+    
     public function via($notifiable)
     {
-        // Use the sync queue driver to process notifications immediately
         return ['mail'];
     }
 
