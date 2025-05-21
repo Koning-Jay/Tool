@@ -1,7 +1,5 @@
 <?php
-
 namespace App\Filament\Resources;
-
 use App\Filament\Resources\UserResource\Pages;
 use App\Filament\Resources\UserResource\RelationManagers;
 use App\Models\User;
@@ -17,7 +15,6 @@ use Illuminate\Support\Facades\Auth;
 class UserResource extends Resource
 {
     protected static ?string $model = User::class;
-
     protected static ?string $navigationIcon = 'heroicon-s-users';
     protected static ?string $navigationGroup = 'User Management';
     protected static ?string $navigationLabel = 'Users';
@@ -29,6 +26,11 @@ class UserResource extends Resource
     protected static ?string $modelLabel = 'User';
     protected static ?string $pluralModelLabel = 'Users';
     protected static ?string $searchLabel = 'Search Users';
+
+    public static function canCreate(): bool
+    {
+        return Auth::user()?->role === 'admin';
+    }
 
     public static function getNavigationBadge(): ?string
     {
@@ -48,7 +50,9 @@ class UserResource extends Resource
                     ->maxLength(255),
                 Forms\Components\TextInput::make('password')
                     ->password()
-                    ->required()
+                    ->required(fn ($record) => ! $record)
+                    ->dehydrated(fn ($state) => filled($state))
+                    ->dehydrateStateUsing(fn ($state) => bcrypt($state))
                     ->maxLength(255),
                 Forms\Components\Select::make('role')
                     ->label('Role')
@@ -56,7 +60,9 @@ class UserResource extends Resource
                         'admin' => 'Admin',
                         'user' => 'User',
                     ])
-                    ->required(),
+                    ->required()
+                    ->default('user')
+                    ->disabled(fn () => Auth::user()?->role !== 'admin'),
             ]);
     }
 
@@ -68,11 +74,22 @@ class UserResource extends Resource
                     ->searchable(),
                 Tables\Columns\TextColumn::make('email')
                     ->searchable(),
+                Tables\Columns\TextColumn::make('role')
+                    ->badge()
+                    ->color(fn (string $state): string => match ($state) {
+                        'admin' => 'danger',
+                        'user' => 'primary',
+                        default => 'gray',
+                    }),
                 Tables\Columns\TextColumn::make('created_at')
                     ->dateTime(),
             ])
             ->filters([
-                
+                Tables\Filters\SelectFilter::make('role')
+                    ->options([
+                        'admin' => 'Admin',
+                        'user' => 'User',
+                    ])
             ])
             ->actions([
                 Tables\Actions\EditAction::make()
@@ -91,7 +108,7 @@ class UserResource extends Resource
     public static function getRelations(): array
     {
         return [
-            
+           
         ];
     }
 

@@ -19,6 +19,7 @@ use Filament\Infolists\Components\Actions as InfolistActions;
 use Filament\Infolists\Components\Actions\Action as InfolistAction;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 
 
 header("refresh: 1800;");
@@ -30,19 +31,22 @@ class ViewMagento extends ViewRecord
     public int $checksLimit = 10;
     protected string $notificationEmail = 'Jay@wedigify.nl';
 
+    /**
+     * Check if the current user has admin role
+     * 
+     * @return bool
+     */
+    protected function isAdmin(): bool
+    {
+        $user = Auth::user();
+      
+        return $user && (property_exists($user, 'role') && $user->role === 'admin');
+    }
 
     protected function getHeaderActions(): array
     {
-        return [
-            Actions\EditAction::make()
-                ->label('Edit')
-                ->icon('heroicon-o-pencil')
-                ->color('primary'),
-            Actions\DeleteAction::make()
-                ->label('Delete')
-                ->icon('heroicon-o-trash')
-                ->color('danger'),
-
+        // Define actions that all users can access
+        $actions = [
             Actions\Action::make('check_now')
                 ->label('Check Now')
                 ->icon('heroicon-o-arrow-path')
@@ -83,22 +87,20 @@ class ViewMagento extends ViewRecord
                         ->success()
                         ->send();
 
-                        
-                        
-                        $this->sendMailchimpNotification(
-                            "Test Alert: Manual Check Triggered",
-                            "This is a test alert triggered manually for {$record->name}.\n\n" .
-                            "This alert was generated on " . now()->format('Y-m-d H:i:s')
-                        );
-                
-                        Notification::make()
-                            ->title('Website Checked')
-                            ->body("All URLs for {$record->name} have been checked.")
-                            ->success()
-                            ->send();
-                
-                        return redirect($this->getResource()::getUrl('view', ['record' => $record]));
-                    })
+                    $this->sendMailchimpNotification(
+                        "Test Alert: Manual Check Triggered",
+                        "This is a test alert triggered manually for {$record->name}.\n\n" .
+                        "This alert was generated on " . now()->format('Y-m-d H:i:s')
+                    );
+            
+                    Notification::make()
+                        ->title('Website Checked')
+                        ->body("All URLs for {$record->name} have been checked.")
+                        ->success()
+                        ->send();
+            
+                    return redirect($this->getResource()::getUrl('view', ['record' => $record]));
+                })
                 ->color('primary'),
                 
             Actions\Action::make('refresh_metrics')
@@ -110,13 +112,30 @@ class ViewMagento extends ViewRecord
                         ->body("The system metrics have been refreshed.")
                         ->success()
                         ->send();
-
-                        
                         
                     $this->redirect($this->getResource()::getUrl('view', ['record' => $this->getRecord()]));
                 })
                 ->color('success'),
         ];
+
+        // Add admin-only actions
+        if ($this->isAdmin()) {
+            $adminActions = [
+                Actions\EditAction::make()
+                    ->label('Edit')
+                    ->icon('heroicon-o-pencil')
+                    ->color('primary'),
+                Actions\DeleteAction::make()
+                    ->label('Delete')
+                    ->icon('heroicon-o-trash')
+                    ->color('danger'),
+            ];
+            
+            // Add admin actions to the beginning of the actions array
+            array_unshift($actions, ...$adminActions);
+        }
+
+        return $actions;
     }
 
     public function infolist(Infolist $infolist): Infolist
@@ -503,6 +522,7 @@ class ViewMagento extends ViewRecord
                                     Section::make('Manage Custom Checks')
                                         ->description('View and manage custom checks assigned to this Magento page')
                                         ->headerActions([
+                                            // Only show these actions to admin users
                                             InfolistAction::make('add_custom_check')
                                                 ->label('Add Custom Check')
                                                 ->icon('heroicon-o-plus')
@@ -511,7 +531,8 @@ class ViewMagento extends ViewRecord
                                                         'preselect_magento' => $record->id,
                                                     ]);
                                                 })
-                                                ->color('primary'),
+                                                ->color('primary')
+                                                ->visible(fn() => $this->isAdmin()),
                                                 
                                             InfolistAction::make('view_all_custom_checks')
                                                 ->label('View All Custom Checks')
@@ -533,6 +554,7 @@ class ViewMagento extends ViewRecord
                                                     }
                                                     
                                                     $systemData = MagentoResource::getSystemTestData();
+                                                    $isAdmin = $this->isAdmin();
                                                     
                                                     $html = '<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 w-full">';
                                                     foreach ($checks as $check) {
@@ -627,6 +649,7 @@ class ViewMagento extends ViewRecord
                                                         $html .= '<div class="flex flex-col space-y-1">';
                                                         $html .= '<span class="text-sm text-gray-500">Threshold</span>';
                                                         $html .= '<span class="text-base font-medium">' . $check->threshold_value . $suffix . '</span>';
+                                
                                                         $html .= '</div>';
                                                         
                                                         if ($currentValue !== null) {

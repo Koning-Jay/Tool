@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\Notification as FacadesNotification;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
-
+use Illuminate\Support\Facades\Auth;
 
 class MagentoResource extends Resource
 {
@@ -28,8 +28,14 @@ class MagentoResource extends Resource
     protected static ?string $navigationGroup = 'Monitoring';
     protected static ?string $label = 'Domains';
     protected static ?string $navigationLabel = 'Domains';
-        protected static ?string $title = 'Domains';
+    protected static ?string $title = 'Domains';
     protected static string $notificationEmail = 'Jay@wedigify.nl';
+
+    // Add canCreate method to restrict domain creation to admin users only
+    public static function canCreate(): bool
+    {
+        return Auth::user()?->role === 'admin';
+    }
 
     public static function getNavigationBadge(): ?string
     {
@@ -86,59 +92,58 @@ class MagentoResource extends Resource
             ]);
     }
 
- /**
-
- * @return array
- */
-protected static function getAvailableHealthCheckFiles(): array
-{
-    try {
-        // List the files we see in the screenshot
-        $healthCheckFiles = [
-            'healthcheck.php' => 'healthcheck.php',
-            'Krale_healthcheck.php' => 'Krale_healthcheck.php',
-            'shuz_healthcheck.php' => 'shuz_healthcheck.php',
-            // system_testdata.json is not included as it's not a PHP file
-        ];
-        
-        Log::info('Using health check files from storage/app directory: ' . json_encode(array_keys($healthCheckFiles)));
-        
-        // Also try to find any additional PHP files dynamically
-        $directory = '';
-        
-        if (Storage::exists($directory)) {
-            $files = Storage::files($directory);
+    /**
+     * @return array
+     */
+    protected static function getAvailableHealthCheckFiles(): array
+    {
+        try {
+            // List the files we see in the screenshot
+            $healthCheckFiles = [
+                'healthcheck.php' => 'healthcheck.php',
+                'Krale_healthcheck.php' => 'Krale_healthcheck.php',
+                'shuz_healthcheck.php' => 'shuz_healthcheck.php',
+                // system_testdata.json is not included as it's not a PHP file
+            ];
             
-            Log::info('Found ' . count($files) . ' files in storage/app directory');
+            Log::info('Using health check files from storage/app directory: ' . json_encode(array_keys($healthCheckFiles)));
             
-            foreach ($files as $file) {
-                $fileName = basename($file);
+            // Also try to find any additional PHP files dynamically
+            $directory = '';
+            
+            if (Storage::exists($directory)) {
+                $files = Storage::files($directory);
                 
-                // Only add PHP files that aren't already in our list
-                if (pathinfo($fileName, PATHINFO_EXTENSION) === 'php' && 
-                    !isset($healthCheckFiles[$fileName])) {
-                    $healthCheckFiles[$fileName] = $fileName;
-                    Log::info('Added additional PHP file: ' . $fileName);
+                Log::info('Found ' . count($files) . ' files in storage/app directory');
+                
+                foreach ($files as $file) {
+                    $fileName = basename($file);
+                    
+                    // Only add PHP files that aren't already in our list
+                    if (pathinfo($fileName, PATHINFO_EXTENSION) === 'php' && 
+                        !isset($healthCheckFiles[$fileName])) {
+                        $healthCheckFiles[$fileName] = $fileName;
+                        Log::info('Added additional PHP file: ' . $fileName);
+                    }
                 }
+            } else {
+                Log::warning("Storage app directory not found, using only predefined files");
             }
-        } else {
-            Log::warning("Storage app directory not found, using only predefined files");
+            
+            Log::info('Final available health check files: ' . json_encode($healthCheckFiles));
+            
+            return $healthCheckFiles;
+        } catch (\Exception $e) {
+            Log::error('Error getting health check files: ' . $e->getMessage());
+            
+            // Return the files we know exist even if there's an error
+            return [
+                'healthcheck.php' => 'healthcheck.php',
+                'Krale_healthcheck.php' => 'Krale_healthcheck.php',
+                'shuz_healthcheck.php' => 'shuz_healthcheck.php',
+            ];
         }
-        
-        Log::info('Final available health check files: ' . json_encode($healthCheckFiles));
-        
-        return $healthCheckFiles;
-    } catch (\Exception $e) {
-        Log::error('Error getting health check files: ' . $e->getMessage());
-        
-        // Return the files we know exist even if there's an error
-        return [
-            'healthcheck.php' => 'healthcheck.php',
-            'Krale_healthcheck.php' => 'Krale_healthcheck.php',
-            'shuz_healthcheck.php' => 'shuz_healthcheck.php',
-        ];
     }
-}
 
     public static function table(Table $table): Table
     {
@@ -257,142 +262,146 @@ protected static function getAvailableHealthCheckFiles(): array
             ->filters([])
             ->actions([
                 Tables\Actions\ViewAction::make(),
-                Tables\Actions\EditAction::make(),
-    
-            Tables\Actions\Action::make('check_now')
-                ->label('Check Now')
-                ->icon('heroicon-o-arrow-path')
-                ->action(function (Magento $record) {
-                    Log::info('Check Now triggered for website', [
-                        'website_id' => $record->id,
-                        'website_name' => $record->name,
-                        'urls' => [
-                            'primary' => $record->url,
-                            'secondary' => $record->secondary_url,
-                            'tertiary' => $record->tertiary_url
-                        ],
-                        'notification_emails' => $record->notification_emails,
-                        'health_check_file' => $record->health_check_file
-                    ]);
+                // Only show edit action to admin users
+                Tables\Actions\EditAction::make()
+                    ->visible(fn () => Auth::user()?->role === 'admin'),
+                // Allow the check_now action for all users
+                Tables\Actions\Action::make('check_now')
+                    ->label('Check Now')
+                    ->icon('heroicon-o-arrow-path')
+                    ->action(function (Magento $record) {
+                        Log::info('Check Now triggered for website', [
+                            'website_id' => $record->id,
+                            'website_name' => $record->name,
+                            'urls' => [
+                                'primary' => $record->url,
+                                'secondary' => $record->secondary_url,
+                                'tertiary' => $record->tertiary_url
+                            ],
+                            'notification_emails' => $record->notification_emails,
+                            'health_check_file' => $record->health_check_file
+                        ]);
 
-                    try {
-                        $response = Http::timeout(5)->get($record->url);
-                        $primaryStatus = $response->successful() ? 'Live' : 'Down';
-                        Log::info('Primary URL check result', [
-                            'url' => $record->url,
+                        try {
+                            $response = Http::timeout(5)->get($record->url);
+                            $primaryStatus = $response->successful() ? 'Live' : 'Down';
+                            Log::info('Primary URL check result', [
+                                'url' => $record->url,
+                                'status' => $primaryStatus,
+                                'response_status' => $response->status()
+                            ]);
+                        } catch (\Exception $e) {
+                            $primaryStatus = 'Down';
+                            Log::warning('Primary URL check failed with exception', [
+                                'url' => $record->url,
+                                'exception' => get_class($e),
+                                'message' => $e->getMessage()
+                            ]);
+                        }
+
+                        Check::create([
+                            'magento_id' => $record->id,
+                            'url_type' => 'primary',
                             'status' => $primaryStatus,
-                            'response_status' => $response->status()
+                            'checked_at' => now(),
                         ]);
-                    } catch (\Exception $e) {
-                        $primaryStatus = 'Down';
-                        Log::warning('Primary URL check failed with exception', [
-                            'url' => $record->url,
-                            'exception' => get_class($e),
-                            'message' => $e->getMessage()
-                        ]);
-                    }
 
-                    Check::create([
-                        'magento_id' => $record->id,
-                        'url_type' => 'primary',
-                        'status' => $primaryStatus,
-                        'checked_at' => now(),
-                    ]);
-
-                
                     
-                    if ($primaryStatus === 'Down') {
-                        Log::warning('Website DOWN detected - preparing notifications', [
-                            'website' => $record->name,
-                            'url' => $record->url,
-                            'notification_emails_raw' => $record->notification_emails,
-                            'notification_emails_type' => gettype($record->notification_emails),
-                            'notification_emails_count' => is_array($record->notification_emails) ? count($record->notification_emails) : 0,
-                        ]);
                         
-                        $emails = $record->notification_emails;
-                        if (empty($emails)) {
-                            Log::warning('No notification emails configured for this website', [
+                        if ($primaryStatus === 'Down') {
+                            Log::warning('Website DOWN detected - preparing notifications', [
                                 'website' => $record->name,
-                                'website_id' => $record->id
+                                'url' => $record->url,
+                                'notification_emails_raw' => $record->notification_emails,
+                                'notification_emails_type' => gettype($record->notification_emails),
+                                'notification_emails_count' => is_array($record->notification_emails) ? count($record->notification_emails) : 0,
                             ]);
-                            $emails = ['jay@wedigify.nl']; 
-                        } elseif (!is_array($emails)) {
-                            Log::warning('notification_emails is not an array, converting', [
-                                'type' => gettype($emails),
-                                'value' => $emails
-                            ]);
-                            if (is_string($emails)) {
-                                $emails = explode(',', $emails);
-                            } else {
-                                $emails = ['jay@wedigify.nl']; 
-                            }
-                        }
-                        
-                        if (!in_array('jay@wedigify.nl', $emails)) {
-                            $emails[] = 'jay@wedigify.nl';
-                        }
-                        
-                        Log::info('Final notification email list', [
-                            'emails' => $emails,
-                            'count' => count($emails)
-                        ]);
-                        
-                        foreach ($emails as $email) {
-                            $email = trim($email);
-                            if (empty($email)) {
-                                Log::warning('Empty email address found, skipping');
-                                continue;
-                            }
                             
-                            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                                Log::warning('Invalid email format, skipping', ['email' => $email]);
-                                continue;
-                            }
-                            
-                            try {
-                                Log::info('Attempting to send notification email', ['to' => $email]);
-                                
-                                // DIRECT MAIL APPROACH - Try this if the notification isn't working
-                                Mail::raw("ALERT:  {$record->name} is DOWN\n\nThe URL {$record->url} is currently unreachable.\n\nThis alert was generated on " . now()->format('Y-m-d H:i:s'), function ($message) use ($email, $record) {
-                                    $message->to($email)
-                                           ->subject("ALERT: {$record->name}  is DOWN");
-                                });
-                                
-                                // Also try the notification approach
-                                FacadesNotification::route('mail', $email)
-                                    ->notify(new WebsiteDownNotification($record, 'primary'));
-                                
-                                Log::info('Notification email sent successfully', ['to' => $email]);
-                            } catch (\Exception $e) {
-                                Log::error('Failed to send notification email', [
-                                    'to' => $email,
-                                    'exception' => get_class($e),
-                                    'message' => $e->getMessage(),
-                                    'trace' => $e->getTraceAsString()
+                            $emails = $record->notification_emails;
+                            if (empty($emails)) {
+                                Log::warning('No notification emails configured for this website', [
+                                    'website' => $record->name,
+                                    'website_id' => $record->id
                                 ]);
+                                $emails = ['jay@wedigify.nl']; 
+                            } elseif (!is_array($emails)) {
+                                Log::warning('notification_emails is not an array, converting', [
+                                    'type' => gettype($emails),
+                                    'value' => $emails
+                                ]);
+                                if (is_string($emails)) {
+                                    $emails = explode(',', $emails);
+                                } else {
+                                    $emails = ['jay@wedigify.nl']; 
+                                }
+                            }
+                            
+                            if (!in_array('jay@wedigify.nl', $emails)) {
+                                $emails[] = 'jay@wedigify.nl';
+                            }
+                            
+                            Log::info('Final notification email list', [
+                                'emails' => $emails,
+                                'count' => count($emails)
+                            ]);
+                            
+                            foreach ($emails as $email) {
+                                $email = trim($email);
+                                if (empty($email)) {
+                                    Log::warning('Empty email address found, skipping');
+                                    continue;
+                                }
+                                
+                                if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                                    Log::warning('Invalid email format, skipping', ['email' => $email]);
+                                    continue;
+                                }
+                                
+                                try {
+                                    Log::info('Attempting to send notification email', ['to' => $email]);
+                                    
+                                    // DIRECT MAIL APPROACH - Try this if the notification isn't working
+                                    Mail::raw("ALERT:  {$record->name} is DOWN\n\nThe URL {$record->url} is currently unreachable.\n\nThis alert was generated on " . now()->format('Y-m-d H:i:s'), function ($message) use ($email, $record) {
+                                        $message->to($email)
+                                            ->subject("ALERT: {$record->name}  is DOWN");
+                                    });
+                                    
+                                    // Also try the notification approach
+                                    FacadesNotification::route('mail', $email)
+                                        ->notify(new WebsiteDownNotification($record, 'primary'));
+                                    
+                                    Log::info('Notification email sent successfully', ['to' => $email]);
+                                } catch (\Exception $e) {
+                                    Log::error('Failed to send notification email', [
+                                        'to' => $email,
+                                        'exception' => get_class($e),
+                                        'message' => $e->getMessage(),
+                                        'trace' => $e->getTraceAsString()
+                                    ]);
+                                }
                             }
                         }
-                    }
 
 
-                    self::checkCustomMetrics($record);
+                        self::checkCustomMetrics($record);
 
-                    $overallStatus = ($primaryStatus === 'Down' || 
-                                    ($secondaryStatus ?? false) === 'Down' || 
-                                    ($tertiaryStatus ?? false) === 'Down') 
-                                    ? 'Down' : 'Live';
+                        $overallStatus = ($primaryStatus === 'Down' || 
+                                        ($secondaryStatus ?? false) === 'Down' || 
+                                        ($tertiaryStatus ?? false) === 'Down') 
+                                        ? 'Down' : 'Live';
 
-                    Notification::make()
-                        ->title('Website Checked')
-                        ->body("{$record->name} status: {$overallStatus}")
-                        ->success()
-                        ->send();
-                })
-                ->color('success')
+                        Notification::make()
+                            ->title('Website Checked')
+                            ->body("{$record->name} status: {$overallStatus}")
+                            ->success()
+                            ->send();
+                    })
+                    ->color('success')
             ])
             ->bulkActions([
-                Tables\Actions\DeleteBulkAction::make(),
+                // Only show delete bulk action to admin users
+                Tables\Actions\DeleteBulkAction::make()
+                    ->visible(fn () => Auth::user()?->role === 'admin'),
             ])
             ->recordUrl(fn (Magento $record): string => 
                 static::getUrl('view', ['record' => $record])

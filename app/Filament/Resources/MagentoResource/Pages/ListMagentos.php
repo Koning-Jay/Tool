@@ -7,6 +7,7 @@ use Filament\Actions;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Notifications\Notification;
 use Filament\Support\Facades\FilamentIcon;
+use Illuminate\Support\Facades\Auth;
 
 header("refresh: 1800;");
 
@@ -17,8 +18,8 @@ class ListMagentos extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            Actions\CreateAction::make(),
-            
+            Actions\CreateAction::make()
+                            ->visible(fn () => Auth::user()?->role === 'admin'),
             Actions\Action::make('check_all_websites')
                 ->label('Alle websites checken')
                 ->icon('heroicon-o-globe-alt')
