@@ -10,6 +10,7 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Auth;
   
 class CustomchecksResource extends Resource
 {
@@ -20,7 +21,11 @@ class CustomchecksResource extends Resource
     protected static ?string $navigationGroup = 'Monitoring';
     protected static ?int $navigationSort = 3;
 
-
+    // Add canCreate method to restrict custom check creation to admin users only
+    public static function canCreate(): bool
+    {
+        return Auth::user()?->role === 'admin';
+    }
 
     public static function form(Form $form): Form
     {
@@ -192,16 +197,26 @@ Forms\Components\Select::make('check_type')
 
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
+                // Only show edit action to admin users
+                Tables\Actions\EditAction::make()
+                    ->visible(fn () => Auth::user()?->role === 'admin'),
+                    
+                // Only show delete action to admin users
                 Tables\Actions\DeleteAction::make()
+                    ->visible(fn () => Auth::user()?->role === 'admin'),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
+                    // Only show delete bulk action to admin users
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->visible(fn () => Auth::user()?->role === 'admin'),
+                        
+                    // Allow activate/deactivate for all users since these are less destructive
                     Tables\Actions\BulkAction::make('activate')
                         ->label('Activate Checks')
                         ->icon('heroicon-o-check-circle')
                         ->action(fn (Builder $query) => $query->update(['is_active' => true])),
+                        
                     Tables\Actions\BulkAction::make('deactivate')
                         ->label('Deactivate Checks')
                         ->icon('heroicon-o-x-circle')
