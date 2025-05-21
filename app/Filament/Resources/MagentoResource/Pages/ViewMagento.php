@@ -253,11 +253,7 @@ class ViewMagento extends ViewRecord
                                         return $latestCheck ? $latestCheck->checked_at->diffForHumans() : 'Nooit';
                                     }),
                             ]),
-                        
-                        TextEntry::make('api_key')
-                            ->label('API Key')
-                            ->visible(fn ($record) => filled($record->api_key)),
-                        
+              
                             Section::make('Current System Usage')
                             ->schema([
                                 TextEntry::make('ram_usage')
@@ -339,6 +335,8 @@ class ViewMagento extends ViewRecord
                                                         25 => '25 checks',
                                                         50 => '50 checks',
                                                         100 => '100 checks',
+                                                        200 => '200 checks',
+                                                        500 => '500 checks',
                                                     ])
                                                     ->default(function($livewire) {
                                                         return $livewire->checksLimit;
@@ -694,7 +692,6 @@ class ViewMagento extends ViewRecord
             
             return true;
             
-            /* Comment out actual Mailchimp sending for testing
             $mailchimpApiKey = config('services.mailchimp.api_key');
             $mailchimpServerPrefix = config('services.mailchimp.server_prefix');
             $fromEmail = config('services.mailchimp.from_email', 'notifications@wedigify.nl');
@@ -726,7 +723,7 @@ class ViewMagento extends ViewRecord
             ]);
     
             return $response->successful();
-            */
+            
         } catch (\Exception $e) {
             Log::error('Failed to send notification: ' . $e->getMessage());
             return false;
