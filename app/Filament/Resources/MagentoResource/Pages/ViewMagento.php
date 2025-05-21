@@ -19,6 +19,8 @@ use Filament\Infolists\Components\Actions as InfolistActions;
 use Filament\Infolists\Components\Actions\Action as InfolistAction;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+
+
 header("refresh: 1800;");
 
 class ViewMagento extends ViewRecord

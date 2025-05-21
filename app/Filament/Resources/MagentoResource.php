@@ -147,9 +147,7 @@ protected static function getAvailableHealthCheckFiles(): array
                 Tables\Columns\TextColumn::make('name')
                     ->label('Name')
                     ->searchable(),
-                Tables\Columns\TextColumn::make('health_check_file')
-                    ->label('Health Check File')
-                    ->default('healthcheck.php'),
+       
                 Tables\Columns\TextColumn::make('customchecks.name')
                     ->label('Assigned Custom Checks')
                     ->formatStateUsing(function ($record) {
