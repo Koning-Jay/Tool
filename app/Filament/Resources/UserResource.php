@@ -12,6 +12,7 @@ use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\SoftDeletingScope;
+use Illuminate\Support\Facades\Auth;
 
 class UserResource extends Resource
 {
@@ -49,7 +50,13 @@ class UserResource extends Resource
                     ->password()
                     ->required()
                     ->maxLength(255),
-                   
+                Forms\Components\Select::make('role')
+                    ->label('Role')
+                    ->options([
+                        'admin' => 'Admin',
+                        'user' => 'User',
+                    ])
+                    ->required(),
             ]);
     }
 
@@ -68,16 +75,15 @@ class UserResource extends Resource
                 
             ])
             ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
-
+                Tables\Actions\EditAction::make()
+                    ->visible(fn () => Auth::user()?->role === 'admin'),
+                Tables\Actions\DeleteAction::make()
+                    ->visible(fn () => Auth::user()?->role === 'admin'),
             ])
             ->bulkActions([
                 Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
-                    
-                    
-                    
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->visible(fn () => Auth::user()?->role === 'admin'),
                 ]),
             ]);
     }
