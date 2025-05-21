@@ -49,6 +49,7 @@ class UserResource extends Resource
                     ->password()
                     ->required()
                     ->maxLength(255),
+                   
             ]);
     }
 
