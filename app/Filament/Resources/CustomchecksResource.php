@@ -70,10 +70,10 @@ Forms\Components\Select::make('check_type')
             }
         }
 
-        return $options;
+            return $options;                                                                                                                    // Return the options                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
     })
-    ->reactive()
-    ->required()
+                                    ->reactive()
+                                    ->required()
                                     ->label('Check Type')
                                     ->helperText('Select the metric to monitor'),
                                 

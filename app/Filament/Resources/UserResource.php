@@ -78,7 +78,7 @@ class UserResource extends Resource
                     ->badge()
                     ->color(fn (string $state): string => match ($state) {
                         'admin' => 'danger',
-                        'user' => 'primary',
+                        'user' => 'success',
                         default => 'gray',
                     }),
                 Tables\Columns\TextColumn::make('created_at')
