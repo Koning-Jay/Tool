@@ -46,17 +46,14 @@ class CustomchecksResource extends Resource
 Forms\Components\Select::make('check_type')
     ->label('Check Type')
     ->options(function (callable $get) {
-        // Default check types
         $options = [
             'cpu' => 'CPU Usage',
             'ram' => 'Memory Usage',
             'disk' => 'Disk Space'
         ];
 
-        // Get selected domains
         $selectedDomains = $get('magentos');
         if (!empty($selectedDomains)) {
-            // Get all selected domains' health check files
             $healthCheckFiles = \App\Models\Magento::whereIn('id', $selectedDomains)
                 ->pluck('health_check_file')
                 ->unique()
