@@ -138,7 +138,6 @@ class MagentoResource extends Resource
         } catch (\Exception $e) {
             Log::error('Error getting health check files: ' . $e->getMessage());
             
-            // Return the files we know exist even if there's an error
             return [
                 'healthcheck.php' => 'healthcheck.php',
                 'Krale_healthcheck.php' => 'Krale_healthcheck.php',

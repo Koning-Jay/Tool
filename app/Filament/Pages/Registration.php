@@ -15,10 +15,8 @@ class Registration extends Register
 {
     protected ?string $maxWidth = '2xl';
     
-    // Define your admin code here - you can also move this to config or environment variable
-    protected string $adminCode = 'wedigo';
+    protected string $adminCode = 'wedigo2025';
     
-    // Property to temporarily store the determined role
     protected string $temporaryRole = 'user';
  
     public function form(Form $form): Form
@@ -72,27 +70,47 @@ class Registration extends Register
     {
         $data = $this->form->getState();
         
-        // Determine role based on admin code
-        $role = 'user'; // default role
-        
+        // Check if admin code was provided
         if (!empty($data['admin_code'])) {
             if ($data['admin_code'] === $this->adminCode) {
-                $role = 'admin';
+                // Valid admin code
+                $this->temporaryRole = 'admin';
                 Notification::make()
                     ->title('Admin privileges granted!')
                     ->success()
                     ->send();
             } else {
+                // Invalid admin code - stop registration and show notification
                 Notification::make()
-                    ->title('Invalid admin code')
-                    ->body('The admin code you entered is incorrect. You will be registered as a regular user.')
+                    ->title('Invalid Admin Code')
+                    ->body('The admin code you entered is incorrect. Please try again with the correct code or remove the admin code to register as a regular user.')
                     ->warning()
+                    ->persistent() // Makes the notification stay until dismissed
+                    ->actions([
+                        \Filament\Notifications\Actions\Action::make('tryAgain')
+                            ->label('Try Again')
+                            ->button()
+                            ->close(),
+                        \Filament\Notifications\Actions\Action::make('continueAsUser')
+                            ->label('Continue as User')
+                            ->button()
+                            ->action(function () {
+                                // Clear the admin code field and continue registration
+                                $this->form->fill(array_merge($this->form->getState(), ['admin_code' => '']));
+                                $this->temporaryRole = 'user';
+                                // Call parent register method
+                                return parent::register();
+                            }),
+                    ])
                     ->send();
+                
+                // Return null to prevent registration from continuing
+                return null;
             }
+        } else {
+            // No admin code provided, register as regular user
+            $this->temporaryRole = 'user';
         }
-        
-        // Store role for later use in handleRegistration
-        $this->temporaryRole = $role;
         
         // Call parent register method
         return parent::register();
