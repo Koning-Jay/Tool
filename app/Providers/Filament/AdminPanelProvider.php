@@ -18,8 +18,8 @@ use Illuminate\Foundation\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use App\Filament\Pages\Registration;
-
 use Illuminate\View\Middleware\ShareErrorsFromSession;
+
 
 class AdminPanelProvider extends PanelProvider
 {
@@ -27,6 +27,9 @@ class AdminPanelProvider extends PanelProvider
     {
         return $panel
             ->default()
+            ->brandName('Wedigify')
+            ->brandLogo(asset('images/wedigo.png'))
+            ->brandLogoHeight('70px')
             ->id('admin')
             ->path('admin')
             ->login()
@@ -35,10 +38,8 @@ class AdminPanelProvider extends PanelProvider
                 'primary' => Color::Amber,
             ])
     ->resources([
-    // Your other resources...
     \Croustibat\FilamentJobsMonitor\Resources\QueueMonitorResource::class,
 ])
-// Or using the plugin:
 ->plugin(new \Croustibat\FilamentJobsMonitor\FilamentJobsMonitorPlugin())
 ->discoverResources(in: app_path('Filament/Resources'), for: 'App\\Filament\\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\\Filament\\Pages')

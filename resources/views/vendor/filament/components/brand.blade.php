@@ -1,0 +1,1 @@
+<img src="{{ asset('C:\Users\31614\Pictures\baby met gonnoe.jpg') }}" alt="Logo" class="h-10">

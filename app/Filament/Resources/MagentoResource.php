@@ -21,6 +21,8 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
 
+
+
 class MagentoResource extends Resource
 {
     protected static ?string $model = Magento::class;
