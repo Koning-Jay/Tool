@@ -33,7 +33,6 @@ class MagentoResource extends Resource
     protected static ?string $title = 'Domains';
     protected static string $notificationEmail = 'Jay@wedigify.nl';
 
-    // Add canCreate method to restrict domain creation to admin users only
     public static function canCreate(): bool
     {
         return Auth::user()?->role === 'admin';
